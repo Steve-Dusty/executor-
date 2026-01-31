@@ -7,7 +7,7 @@ const testRouter = new Hono();
 
 // Test Firecrawl scrape
 testRouter.post('/firecrawl/scrape', async (c) => {
-  const { url } = await c.req.json();
+  const { url, actions } = await c.req.json();
 
   if (!url) {
     return c.json({ error: 'URL is required' }, 400);
@@ -19,6 +19,7 @@ testRouter.post('/firecrawl/scrape', async (c) => {
     mode: 'scrape',
     url,
     formats: ['markdown'],
+    actions,
   });
 
   const result = await firecrawl.action();
@@ -63,6 +64,93 @@ testRouter.post('/firecrawl/crawl', async (c) => {
   });
 
   const result = await firecrawl.action();
+  return c.json(result);
+});
+
+// Test Firecrawl extract (AI-powered structured extraction)
+testRouter.post('/firecrawl/extract', async (c) => {
+  const { url, urls, schema, prompt } = await c.req.json();
+
+  if (!url && !urls) {
+    return c.json({ error: 'URL or URLs required' }, 400);
+  }
+  if (!schema && !prompt) {
+    return c.json({ error: 'Schema or prompt required' }, 400);
+  }
+
+  console.log(`[Test] Firecrawl extract: ${url || urls}`);
+
+  const firecrawl = new FirecrawlBubble({
+    mode: 'extract',
+    url,
+    urls,
+    schema,
+    prompt,
+  });
+
+  const result = await firecrawl.action();
+  return c.json(result);
+});
+
+// Test Firecrawl map (discover all URLs)
+testRouter.post('/firecrawl/map', async (c) => {
+  const { url, limit = 100 } = await c.req.json();
+
+  if (!url) {
+    return c.json({ error: 'URL is required' }, 400);
+  }
+
+  console.log(`[Test] Firecrawl map: ${url}`);
+
+  const firecrawl = new FirecrawlBubble({
+    mode: 'map',
+    url,
+    limit,
+  });
+
+  const result = await firecrawl.action();
+  return c.json(result);
+});
+
+// Test Reducto parse (with polling)
+testRouter.post('/reducto/parse', async (c) => {
+  const { documentUrl, waitForCompletion = true } = await c.req.json();
+
+  if (!documentUrl) {
+    return c.json({ error: 'documentUrl is required' }, 400);
+  }
+
+  console.log(`[Test] Reducto parse: ${documentUrl}`);
+
+  const reducto = new ReductoBubble({
+    mode: 'parse',
+    documentUrl,
+    waitForCompletion,
+    maxWaitMs: 60000,
+  });
+
+  const result = await reducto.action();
+  return c.json(result);
+});
+
+// Test Reducto extract
+testRouter.post('/reducto/extract', async (c) => {
+  const { documentUrl, schema, waitForCompletion = true } = await c.req.json();
+
+  if (!documentUrl || !schema) {
+    return c.json({ error: 'documentUrl and schema are required' }, 400);
+  }
+
+  console.log(`[Test] Reducto extract: ${documentUrl}`);
+
+  const reducto = new ReductoBubble({
+    mode: 'extract',
+    documentUrl,
+    schema,
+    waitForCompletion,
+  });
+
+  const result = await reducto.action();
   return c.json(result);
 });
 
@@ -112,45 +200,6 @@ testRouter.post('/resend/approval', async (c) => {
 
   const result = await resend.action();
   return c.json({ ...result, runId: testRunId });
-});
-
-// Test Reducto parse
-testRouter.post('/reducto/parse', async (c) => {
-  const { documentUrl } = await c.req.json();
-
-  if (!documentUrl) {
-    return c.json({ error: 'documentUrl is required' }, 400);
-  }
-
-  console.log(`[Test] Reducto parse: ${documentUrl}`);
-
-  const reducto = new ReductoBubble({
-    mode: 'parse',
-    documentUrl,
-  });
-
-  const result = await reducto.action();
-  return c.json(result);
-});
-
-// Test Reducto extract
-testRouter.post('/reducto/extract', async (c) => {
-  const { documentUrl, schema } = await c.req.json();
-
-  if (!documentUrl || !schema) {
-    return c.json({ error: 'documentUrl and schema are required' }, 400);
-  }
-
-  console.log(`[Test] Reducto extract: ${documentUrl}`);
-
-  const reducto = new ReductoBubble({
-    mode: 'extract',
-    documentUrl,
-    schema,
-  });
-
-  const result = await reducto.action();
-  return c.json(result);
 });
 
 // Check env vars

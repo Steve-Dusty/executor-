@@ -2,10 +2,10 @@ import Reducto from 'reductoai';
 
 export interface ReductoConfig {
   mode: 'parse' | 'extract';
-  // For parse mode
   documentUrl?: string;
-  // For extract mode
   schema?: Record<string, unknown>;
+  waitForCompletion?: boolean; // Poll until done (default: true)
+  maxWaitMs?: number; // Max wait time (default: 60000)
 }
 
 export interface ReductoResult {
@@ -29,7 +29,7 @@ export class ReductoBubble {
   }
 
   async action(): Promise<ReductoResult> {
-    const { mode, documentUrl, schema } = this.config;
+    const { mode, documentUrl, schema, waitForCompletion = true, maxWaitMs = 60000 } = this.config;
 
     try {
       switch (mode) {
@@ -44,16 +44,18 @@ export class ReductoBubble {
             input: documentUrl,
           });
 
-          // Handle async response
+          // Handle async response - poll for completion
           if ('job_id' in result) {
-            return {
-              success: true,
-              data: {
-                jobId: result.job_id,
-                status: 'processing',
-                message: 'Document is being processed asynchronously',
-              },
-            };
+            if (!waitForCompletion) {
+              return {
+                success: true,
+                data: { jobId: result.job_id, status: 'processing' },
+              };
+            }
+
+            // Poll for completion
+            const finalResult = await this.pollForCompletion(result.job_id, maxWaitMs);
+            return finalResult;
           }
 
           // Sync response with parsed content
@@ -65,6 +67,7 @@ export class ReductoBubble {
                 metadata: chunk.metadata,
               })),
               metadata: result.result?.metadata,
+              fullText: result.result?.chunks?.map((c) => c.content).join('\n\n'),
             },
           };
         }
@@ -84,22 +87,19 @@ export class ReductoBubble {
             schema,
           });
 
-          // Handle async response
           if ('job_id' in result) {
-            return {
-              success: true,
-              data: {
-                jobId: result.job_id,
-                status: 'processing',
-              },
-            };
+            if (!waitForCompletion) {
+              return {
+                success: true,
+                data: { jobId: result.job_id, status: 'processing' },
+              };
+            }
+            return await this.pollForCompletion(result.job_id, maxWaitMs);
           }
 
           return {
             success: true,
-            data: {
-              extracted: result.result,
-            },
+            data: { extracted: result.result },
           };
         }
 
@@ -114,5 +114,55 @@ export class ReductoBubble {
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
+  }
+
+  private async pollForCompletion(jobId: string, maxWaitMs: number): Promise<ReductoResult> {
+    const startTime = Date.now();
+    const pollInterval = 2000; // 2 seconds
+
+    console.log(`[Reducto] Polling for job ${jobId}...`);
+
+    while (Date.now() - startTime < maxWaitMs) {
+      try {
+        const jobResult = await this.client.job.get(jobId);
+
+        if ('status' in jobResult && jobResult.status === 'completed') {
+          console.log(`[Reducto] Job ${jobId} completed`);
+          return {
+            success: true,
+            data: {
+              jobId,
+              status: 'completed',
+              result: jobResult.result,
+              chunks: jobResult.result?.chunks?.map((chunk: { content?: string; metadata?: unknown }) => ({
+                content: chunk.content,
+                metadata: chunk.metadata,
+              })),
+              fullText: jobResult.result?.chunks?.map((c: { content?: string }) => c.content).join('\n\n'),
+            },
+          };
+        }
+
+        if ('status' in jobResult && jobResult.status === 'failed') {
+          return {
+            success: false,
+            data: null,
+            error: `Job failed: ${jobResult.error || 'Unknown error'}`,
+          };
+        }
+
+        // Still processing, wait and retry
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      } catch (error) {
+        console.error(`[Reducto] Poll error:`, error);
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      }
+    }
+
+    return {
+      success: false,
+      data: { jobId, status: 'timeout' },
+      error: `Job ${jobId} timed out after ${maxWaitMs}ms`,
+    };
   }
 }

@@ -82,105 +82,137 @@ export class WorkflowEngine {
   ): Promise<Record<string, ExecutionResult>> {
     const results: Record<string, ExecutionResult> = {};
 
-    // Topological sort nodes based on edges
-    const sortedNodes = this.topologicalSort(nodes, edges);
+    // Group nodes by execution level (for parallel execution)
+    const levels = this.groupNodesByLevel(nodes, edges);
 
-    for (const node of sortedNodes) {
-      const inputs = this.gatherInputs(node, edges, results);
+    console.log(`[Workflow] Executing ${nodes.length} nodes in ${levels.length} parallel levels`);
 
-      // Notify that this node is executing (with inputs for debugging)
-      this.onNodeExecuting?.(node.id, node.type, inputs);
+    for (const levelNodes of levels) {
+      // Execute all nodes at this level in parallel
+      const levelPromises = levelNodes.map(async (node) => {
+        const inputs = this.gatherInputs(node, edges, results);
 
-      const startTime = Date.now();
+        // Notify that this node is executing
+        this.onNodeExecuting?.(node.id, node.type, inputs);
 
-      try {
-        let result: unknown;
+        const startTime = Date.now();
 
-        switch (node.type) {
-          case 'trigger':
-            result = { data: triggerData };
-            break;
+        try {
+          const result = await this.executeNode(node, inputs, triggerData, nodes, edges, businessContext);
+          const duration = Date.now() - startTime;
 
-          case 'ai':
-            result = await this.executeAINode(node.data, inputs, triggerData);
-            break;
+          const execResult: ExecutionResult = {
+            nodeId: node.id,
+            status: 'success',
+            data: result,
+            duration,
+          };
+          results[node.id] = execResult;
 
-          case 'action':
-            result = await this.executeActionNode(node.data, inputs);
-            break;
+          this.onNodeComplete?.(node.id, node.type, execResult, inputs);
+          console.log(`[Workflow] ✓ ${node.id} (${node.type}) completed in ${duration}ms`);
+        } catch (error) {
+          const duration = Date.now() - startTime;
+          const execResult: ExecutionResult = {
+            nodeId: node.id,
+            status: 'error',
+            data: null,
+            duration,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          };
+          results[node.id] = execResult;
 
-          case 'lovable':
-            result = await this.executeLovableNode(node.data, inputs);
-            break;
-
-          case 'condition':
-            result = { result: this.evaluateCondition(node.data, inputs) };
-            break;
-
-          case 'adaptation':
-            result = await this.executeAdaptationNode(
-              nodes,
-              edges,
-              triggerData,
-              businessContext
-            );
-            break;
-
-          case 'firecrawl':
-            result = await this.executeFirecrawlNode(node.data, inputs);
-            break;
-
-          case 'resend':
-            result = await this.executeResendNode(node.data, inputs);
-            break;
-
-          case 'approval':
-            result = await this.executeApprovalNode(node.data, inputs);
-            break;
-
-          case 'reducto':
-            result = await this.executeReductoNode(node.data, inputs);
-            break;
-
-          default:
-            throw new Error(`Unknown node type: ${node.type}`);
+          this.onNodeComplete?.(node.id, node.type, execResult, inputs);
+          console.error(`[Workflow] ✗ ${node.id} error:`, error);
         }
+      });
 
-        const duration = Date.now() - startTime;
-        const execResult: ExecutionResult = {
-          nodeId: node.id,
-          status: 'success',
-          data: result,
-          duration,
-        };
-        results[node.id] = execResult;
-
-        // Broadcast node completion (with inputs for debugging)
-        this.onNodeComplete?.(node.id, node.type, execResult, inputs);
-
-        console.log(`[Workflow] Executed ${node.id} (${node.type}) in ${duration}ms`);
-      } catch (error) {
-        const duration = Date.now() - startTime;
-        const execResult: ExecutionResult = {
-          nodeId: node.id,
-          status: 'error',
-          data: null,
-          duration,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        };
-        results[node.id] = execResult;
-
-        // Broadcast node completion with error (with inputs for debugging)
-        this.onNodeComplete?.(node.id, node.type, execResult, inputs);
-
-        console.error(`[Workflow] Error executing ${node.id}:`, error);
-      }
-
-      // Small delay between nodes for visual effect
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Wait for all nodes at this level to complete before moving to next level
+      await Promise.all(levelPromises);
     }
 
     return results;
+  }
+
+  /**
+   * Group nodes by execution level for parallel processing
+   * Nodes with no dependencies (or only completed dependencies) can run in parallel
+   */
+  private groupNodesByLevel(nodes: WorkflowNode[], edges: WorkflowEdge[]): WorkflowNode[][] {
+    const levels: WorkflowNode[][] = [];
+    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+    const completed = new Set<string>();
+
+    // Build dependency map
+    const dependencies = new Map<string, Set<string>>();
+    nodes.forEach((n) => dependencies.set(n.id, new Set()));
+    edges.forEach((e) => dependencies.get(e.target)?.add(e.source));
+
+    while (completed.size < nodes.length) {
+      // Find all nodes whose dependencies are all completed
+      const readyNodes = nodes.filter(
+        (n) => !completed.has(n.id) && [...(dependencies.get(n.id) || [])].every((dep) => completed.has(dep))
+      );
+
+      if (readyNodes.length === 0) {
+        // Circular dependency or orphan nodes - add remaining
+        const remaining = nodes.filter((n) => !completed.has(n.id));
+        if (remaining.length > 0) levels.push(remaining);
+        break;
+      }
+
+      levels.push(readyNodes);
+      readyNodes.forEach((n) => completed.add(n.id));
+    }
+
+    return levels;
+  }
+
+  /**
+   * Execute a single node based on its type
+   */
+  private async executeNode(
+    node: WorkflowNode,
+    inputs: Record<string, unknown>,
+    triggerData: Record<string, unknown>,
+    allNodes: WorkflowNode[],
+    allEdges: WorkflowEdge[],
+    businessContext?: BusinessContext
+  ): Promise<unknown> {
+    switch (node.type) {
+      case 'trigger':
+        return { data: triggerData };
+
+      case 'ai':
+        return await this.executeAINode(node.data, inputs, triggerData);
+
+      case 'action':
+        return await this.executeActionNode(node.data, inputs);
+
+      case 'lovable':
+        return await this.executeLovableNode(node.data, inputs);
+
+      case 'condition':
+        return { result: this.evaluateCondition(node.data, inputs) };
+
+      case 'adaptation':
+        return await this.executeAdaptationNode(allNodes, allEdges, triggerData, businessContext);
+
+      case 'firecrawl':
+        return await this.executeFirecrawlNode(node.data, inputs);
+
+      case 'resend':
+        return await this.executeResendNode(node.data, inputs);
+
+      case 'approval':
+        return await this.executeApprovalNode(node.data, inputs);
+
+      case 'reducto':
+        return await this.executeReductoNode(node.data, inputs);
+
+      default:
+        throw new Error(`Unknown node type: ${node.type}`);
+    }
   }
 
   /**
@@ -430,30 +462,50 @@ Return ONLY valid JSON, no markdown code blocks.`;
   }
 
   /**
-   * Execute Firecrawl node - web scraping and search
+   * Execute Firecrawl node - web scraping, search, extract, map
    */
   private async executeFirecrawlNode(
     data: Record<string, unknown>,
     inputs: Record<string, unknown>
   ): Promise<unknown> {
-    const mode = (data.mode as 'scrape' | 'crawl' | 'search') || 'scrape';
+    const mode = (data.mode as 'scrape' | 'crawl' | 'search' | 'extract' | 'map') || 'scrape';
     let url = data.url as string | undefined;
+    let urls = data.urls as string[] | undefined;
     let query = data.query as string | undefined;
+    let prompt = data.prompt as string | undefined;
 
-    // Interpolate URL/query from inputs if needed
-    if (url && url.includes('{{')) {
-      url = this.interpolate(url, inputs);
-    }
-    if (query && query.includes('{{')) {
-      query = this.interpolate(query, inputs);
+    // Interpolate values from inputs if needed
+    if (url?.includes('{{')) url = this.interpolate(url, inputs);
+    if (query?.includes('{{')) query = this.interpolate(query, inputs);
+    if (prompt?.includes('{{')) prompt = this.interpolate(prompt, inputs);
+
+    // Auto-discover URLs from upstream firecrawl search results
+    if (!url && !urls && mode !== 'search') {
+      const discoveredUrls: string[] = [];
+      for (const [, nodeData] of Object.entries(inputs)) {
+        const inputResult = nodeData as { data?: { results?: Array<{ url?: string }>; url?: string } };
+        if (inputResult?.data?.results) {
+          inputResult.data.results.forEach((r) => r.url && discoveredUrls.push(r.url));
+        } else if (inputResult?.data?.url) {
+          discoveredUrls.push(inputResult.data.url);
+        }
+      }
+      if (discoveredUrls.length > 0) {
+        urls = discoveredUrls;
+        url = discoveredUrls[0];
+      }
     }
 
     const firecrawl = new FirecrawlBubble({
       mode,
       url,
+      urls,
       query,
+      prompt,
+      schema: data.schema as Record<string, unknown> | undefined,
       limit: (data.limit as number) || 5,
-      formats: (data.formats as ('markdown' | 'html')[]) || ['markdown'],
+      formats: (data.formats as ('markdown' | 'html' | 'json')[]) || ['markdown'],
+      actions: data.actions as Array<{ type: string; selector?: string; milliseconds?: number; text?: string; direction?: string }>,
     });
 
     return await firecrawl.action();
@@ -524,6 +576,7 @@ Return ONLY valid JSON, no markdown code blocks.`;
 
   /**
    * Execute Reducto node - document parsing and extraction
+   * Auto-discovers PDF URLs from upstream Firecrawl results
    */
   private async executeReductoNode(
     data: Record<string, unknown>,
@@ -533,19 +586,57 @@ Return ONLY valid JSON, no markdown code blocks.`;
     let documentUrl = data.documentUrl as string | undefined;
 
     // Interpolate URL from inputs if needed
-    if (documentUrl && documentUrl.includes('{{')) {
+    if (documentUrl?.includes('{{')) {
       documentUrl = this.interpolate(documentUrl, inputs);
     }
 
-    // Check if there's a URL from previous Firecrawl node
+    // Auto-discover PDF URLs from upstream Firecrawl results
     if (!documentUrl) {
-      for (const [nodeId, nodeData] of Object.entries(inputs)) {
-        const inputData = nodeData as { data?: { url?: string } };
-        if (inputData?.data?.url) {
-          documentUrl = inputData.data.url;
+      for (const [, nodeData] of Object.entries(inputs)) {
+        const inputResult = nodeData as {
+          data?: {
+            results?: Array<{ url?: string }>;
+            url?: string;
+            links?: string[];
+          }
+        };
+
+        // Check search results for PDF links
+        if (inputResult?.data?.results) {
+          const pdfResult = inputResult.data.results.find((r) =>
+            r.url?.toLowerCase().endsWith('.pdf')
+          );
+          if (pdfResult?.url) {
+            documentUrl = pdfResult.url;
+            break;
+          }
+        }
+
+        // Check direct URL
+        if (inputResult?.data?.url?.toLowerCase().endsWith('.pdf')) {
+          documentUrl = inputResult.data.url;
           break;
         }
+
+        // Check links array
+        if (inputResult?.data?.links) {
+          const pdfLink = inputResult.data.links.find((l) =>
+            l.toLowerCase().endsWith('.pdf')
+          );
+          if (pdfLink) {
+            documentUrl = pdfLink;
+            break;
+          }
+        }
       }
+    }
+
+    if (!documentUrl) {
+      return {
+        success: false,
+        data: null,
+        error: 'No document URL found. Provide documentUrl or connect to a Firecrawl node that finds PDFs.',
+      };
     }
 
     const reducto = new ReductoBubble({

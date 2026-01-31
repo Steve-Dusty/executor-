@@ -11,44 +11,98 @@ const stripe = process.env.STRIPE_SECRET_KEY
 export const webhookRouter = new Hono();
 
 // Store for workflows and business state
+// Multi-branch workflow with fan-out and fan-in
 let currentWorkflow = {
   nodes: [
+    // TRIGGER
     {
-      id: '1',
+      id: 'trigger-1',
       type: 'trigger',
-      position: { x: 250, y: 0 },
-      data: { label: 'Schedule Trigger', triggerType: 'schedule', schedule: 'daily' },
+      position: { x: 400, y: 0 },
+      data: { label: 'Daily Update', triggerType: 'schedule', schedule: 'daily' },
     },
+
+    // FAN-OUT: Three parallel research branches
     {
-      id: '2',
+      id: 'fc-news',
       type: 'firecrawl',
-      position: { x: 250, y: 120 },
-      data: { label: 'Research Data', mode: 'search', query: 'stock market news today' },
+      position: { x: 100, y: 150 },
+      data: { label: 'Search News', mode: 'search', query: 'NVIDIA stock news today', limit: 3 },
     },
     {
-      id: '3',
+      id: 'fc-prices',
+      type: 'firecrawl',
+      position: { x: 400, y: 150 },
+      data: { label: 'Get Stock Data', mode: 'extract', url: 'https://www.cnbc.com/quotes/NVDA', prompt: 'Extract stock price, percent change, volume, and market cap' },
+    },
+    {
+      id: 'fc-docs',
+      type: 'firecrawl',
+      position: { x: 700, y: 150 },
+      data: { label: 'Find SEC Filings', mode: 'search', query: 'NVIDIA 10-K SEC filing 2024 filetype:pdf', limit: 2 },
+    },
+
+    // Document parsing (connected to fc-docs)
+    {
+      id: 'reducto-1',
+      type: 'reducto',
+      position: { x: 700, y: 300 },
+      data: { label: 'Parse SEC Filing', mode: 'parse' },
+    },
+
+    // FAN-IN: AI combines all data
+    {
+      id: 'ai-combine',
       type: 'ai',
-      position: { x: 250, y: 240 },
-      data: { label: 'Analyze & Summarize', prompt: 'Analyze the scraped data and create a summary of key market trends.' },
+      position: { x: 400, y: 450 },
+      data: {
+        label: 'Analyze & Combine',
+        prompt: 'Combine and analyze all the financial data: news sentiment, current stock price, and SEC filing insights. Provide a comprehensive summary with key metrics and recommendations.'
+      },
     },
+
+    // Human approval gate
     {
-      id: '4',
+      id: 'approval-1',
       type: 'approval',
-      position: { x: 250, y: 360 },
+      position: { x: 400, y: 600 },
       data: { label: 'Human Approval', to: 'kuantingk2@gmail.com' },
     },
+
+    // FAN-OUT: Multiple output actions
     {
-      id: '5',
+      id: 'action-dashboard',
       type: 'action',
-      position: { x: 250, y: 480 },
+      position: { x: 200, y: 750 },
       data: { label: 'Update Dashboard', actionType: 'custom' },
+    },
+    {
+      id: 'action-notify',
+      type: 'resend',
+      position: { x: 600, y: 750 },
+      data: { label: 'Send Report', to: 'kuantingk2@gmail.com', subject: 'Daily NVIDIA Report' },
     },
   ],
   edges: [
-    { id: 'e1-2', source: '1', target: '2' },
-    { id: 'e2-3', source: '2', target: '3' },
-    { id: 'e3-4', source: '3', target: '4' },
-    { id: 'e4-5', source: '4', target: '5' },
+    // Trigger to fan-out
+    { id: 'e-t-news', source: 'trigger-1', target: 'fc-news' },
+    { id: 'e-t-prices', source: 'trigger-1', target: 'fc-prices' },
+    { id: 'e-t-docs', source: 'trigger-1', target: 'fc-docs' },
+
+    // Docs to Reducto
+    { id: 'e-docs-reducto', source: 'fc-docs', target: 'reducto-1' },
+
+    // Fan-in to AI
+    { id: 'e-news-ai', source: 'fc-news', target: 'ai-combine' },
+    { id: 'e-prices-ai', source: 'fc-prices', target: 'ai-combine' },
+    { id: 'e-reducto-ai', source: 'reducto-1', target: 'ai-combine' },
+
+    // AI to Approval
+    { id: 'e-ai-approval', source: 'ai-combine', target: 'approval-1' },
+
+    // Approval to fan-out outputs
+    { id: 'e-approval-dashboard', source: 'approval-1', target: 'action-dashboard' },
+    { id: 'e-approval-notify', source: 'approval-1', target: 'action-notify' },
   ],
 };
 
