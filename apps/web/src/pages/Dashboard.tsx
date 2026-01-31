@@ -273,7 +273,7 @@ function Toast({ message, isVisible, onClose }: {
 }) {
   useEffect(() => {
     if (isVisible) {
-      const timer = setTimeout(onClose, 10000); // 10 seconds
+      const timer = setTimeout(onClose, 30000); // 30 seconds
       return () => clearTimeout(timer);
     }
   }, [isVisible, onClose]);
