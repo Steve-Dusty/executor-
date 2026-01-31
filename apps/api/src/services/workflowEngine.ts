@@ -12,6 +12,7 @@ import { FirecrawlBubble } from '../bubbles/FirecrawlBubble';
 import { ResendBubble } from '../bubbles/ResendBubble';
 import { ApprovalBubble } from '../bubbles/ApprovalBubble';
 import { ReductoBubble } from '../bubbles/ReductoBubble';
+import { MongoRAGBubble } from '../bubbles/MongoRAGBubble';
 import { dashboardContent, broadcastDashboardUpdate } from '../routes/dashboard';
 
 // Types for our workflow nodes
@@ -210,6 +211,9 @@ export class WorkflowEngine {
 
       case 'reducto':
         return await this.executeReductoNode(node.data, inputs);
+
+      case 'mongo_rag':
+        return await MongoRAGBubble.execute(node.data, inputs, { triggerData });
 
       default:
         throw new Error(`Unknown node type: ${node.type}`);

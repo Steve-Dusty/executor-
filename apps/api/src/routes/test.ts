@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { FirecrawlBubble } from '../bubbles/FirecrawlBubble';
 import { ResendBubble } from '../bubbles/ResendBubble';
 import { ReductoBubble } from '../bubbles/ReductoBubble';
+import { MongoRAGBubble } from '../bubbles/MongoRAGBubble';
 
 const testRouter = new Hono();
 
@@ -202,6 +203,35 @@ testRouter.post('/resend/approval', async (c) => {
   return c.json({ ...result, runId: testRunId });
 });
 
+// Test MongoRAG vector search
+testRouter.post('/mongo-rag', async (c) => {
+  const { ticker, query, collections, topK } = await c.req.json();
+
+  if (!ticker) {
+    return c.json({ error: 'ticker is required' }, 400);
+  }
+
+  console.log(`[Test] MongoRAG search for ticker: ${ticker}`);
+
+  try {
+    const mongoRag = new MongoRAGBubble({
+      ticker,
+      query,
+      collections,
+      topK,
+    });
+
+    const result = await mongoRag.action();
+    return c.json(result);
+  } catch (error) {
+    console.error('[Test] MongoRAG error:', error);
+    return c.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }, 500);
+  }
+});
+
 // Check env vars
 testRouter.get('/env-check', (c) => {
   return c.json({
@@ -209,6 +239,8 @@ testRouter.get('/env-check', (c) => {
     reducto: !!process.env.REDUCTO_API_KEY,
     resend: !!process.env.RESEND_API_KEY,
     openai: !!process.env.OPENAI_API_KEY,
+    voyage: !!process.env.VOYAGE_API_KEY,
+    mongodb: !!process.env.MONGODB_URI,
     apiBaseUrl: process.env.API_BASE_URL || 'not set (using localhost:3001)',
   });
 });

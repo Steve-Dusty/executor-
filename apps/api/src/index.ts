@@ -7,6 +7,7 @@ import { chatRouter } from './routes/chat';
 import { testRouter } from './routes/test';
 import { approveRouter } from './routes/approve';
 import { dashboardRouter, setDashboardBroadcast } from './routes/dashboard';
+import { connectDatabase, closeDatabase } from './services/database';
 
 const app = new Hono();
 
@@ -57,6 +58,9 @@ app.post('/trigger-adaptation', async (c) => {
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
+// Initialize database before starting server
+await connectDatabase();
+
 // Start server with WebSocket support
 const port = Number(process.env.PORT) || 3001;
 
@@ -99,3 +103,10 @@ server = Bun.serve({
 
 console.log(`Server running at http://localhost:${port}`);
 console.log(`WebSocket available at ws://localhost:${port}/ws`);
+
+// Handle graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n✓ Shutting down server...');
+  await closeDatabase();
+  process.exit(0);
+});
