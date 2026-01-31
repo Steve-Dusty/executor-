@@ -42,52 +42,65 @@ export function TriggerNode({ data, selected }: NodeProps) {
   };
 
   return (
-    <div className={`relative group ${selected ? 'ring-2 ring-accent-green/50 rounded-2xl' : ''}`}>
+    <div className={`relative group ${selected ? 'ring-2 ring-node-trigger/50 rounded-2xl' : ''}`}>
       {/* Debug indicator badge */}
       {nodeData.hasDebugData && (
         <div className={`
-          absolute -top-1 -right-1 z-10
+          absolute -top-1.5 -right-1.5 z-10
           w-5 h-5 rounded-full
           flex items-center justify-center
           ${nodeData.debugStatus === 'error'
-            ? 'bg-accent-red text-white'
+            ? 'bg-error text-bg-primary'
             : nodeData.debugStatus === 'success'
-            ? 'bg-accent-green text-white'
-            : 'bg-accent-blue text-white'}
+            ? 'bg-success text-bg-primary'
+            : 'bg-info text-bg-primary'}
           shadow-lg cursor-pointer
         `} title="Click node to view debug data">
-          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          {nodeData.debugStatus === 'success' ? (
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          ) : nodeData.debugStatus === 'running' ? (
+            <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
         </div>
       )}
 
       {/* Glow effect behind node */}
       <div className={`
         absolute inset-0 rounded-2xl blur-xl transition-opacity duration-300
-        bg-gradient-to-b from-accent-green/20 to-transparent
-        ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}
+        bg-node-trigger/30
+        ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'}
       `} />
 
       {/* Main node */}
       <div className="
         relative w-[200px] rounded-2xl overflow-hidden
-        bg-gradient-to-b from-bg-tertiary to-bg-secondary
-        border border-glass-border
-        shadow-2xl shadow-black/50
+        bg-gradient-to-b from-bg-elevated to-bg-tertiary
+        border border-node-trigger/30
+        shadow-xl shadow-black/40
         transition-all duration-200
+        hover:border-node-trigger/50
       ">
         {/* Header accent line */}
-        <div className="h-1 bg-gradient-to-r from-accent-green to-accent-green/50" />
+        <div className="h-1 bg-gradient-to-r from-node-trigger via-node-trigger/70 to-node-trigger/40" />
 
         {/* Content */}
         <div className="p-4">
           <div className="flex items-center gap-3">
             <div className="
               w-10 h-10 rounded-xl
-              bg-accent-green/10 border border-accent-green/20
+              bg-node-trigger/10 border border-node-trigger/30
               flex items-center justify-center
-              text-accent-green
+              text-node-trigger
+              transition-transform group-hover:scale-105
             ">
               {getIcon()}
             </div>
@@ -99,8 +112,11 @@ export function TriggerNode({ data, selected }: NodeProps) {
 
           {/* Status indicator */}
           <div className="mt-3 flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-accent-green animate-pulse" />
-            <span className="text-xs text-text-secondary">Listening</span>
+            <div className="relative">
+              <div className="w-2 h-2 rounded-full bg-node-trigger" />
+              <div className="absolute inset-0 w-2 h-2 rounded-full bg-node-trigger animate-ping opacity-75" />
+            </div>
+            <span className="text-xs text-text-secondary font-medium">Listening</span>
           </div>
         </div>
       </div>
@@ -110,8 +126,8 @@ export function TriggerNode({ data, selected }: NodeProps) {
         type="source"
         position={Position.Bottom}
         className="
-          !w-3 !h-3 !bg-bg-tertiary !border-2 !border-accent-green
-          hover:!bg-accent-green hover:!scale-125 transition-all
+          !w-3 !h-3 !bg-bg-tertiary !border-2 !border-node-trigger
+          hover:!bg-node-trigger hover:!scale-150 !transition-all !duration-200
         "
       />
     </div>

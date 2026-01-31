@@ -6,6 +6,8 @@ interface LovableNodeData extends Record<string, unknown> {
   targetComponent: string;
   projectId?: string;
   config?: Record<string, unknown>;
+  hasDebugData?: boolean;
+  debugStatus?: 'running' | 'success' | 'error';
 }
 
 export function LovableNode({ data, selected }: NodeProps) {
@@ -53,33 +55,65 @@ export function LovableNode({ data, selected }: NodeProps) {
   };
 
   return (
-    <div className={`relative group ${selected ? 'ring-2 ring-accent-pink/50 rounded-2xl' : ''}`}>
+    <div className={`relative group ${selected ? 'ring-2 ring-node-output/50 rounded-2xl' : ''}`}>
+      {/* Debug indicator badge */}
+      {nodeData.hasDebugData && (
+        <div className={`
+          absolute -top-1.5 -right-1.5 z-10
+          w-5 h-5 rounded-full
+          flex items-center justify-center
+          ${nodeData.debugStatus === 'error'
+            ? 'bg-error text-bg-primary'
+            : nodeData.debugStatus === 'success'
+            ? 'bg-success text-bg-primary'
+            : 'bg-info text-bg-primary'}
+          shadow-lg cursor-pointer
+        `} title="Click node to view debug data">
+          {nodeData.debugStatus === 'success' ? (
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          ) : nodeData.debugStatus === 'running' ? (
+            <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+        </div>
+      )}
+
       {/* Glow effect behind node */}
       <div className={`
         absolute inset-0 rounded-2xl blur-xl transition-opacity duration-300
-        bg-gradient-to-br from-accent-pink/20 to-accent-purple/10
-        ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}
+        bg-gradient-to-br from-node-output/40 to-node-ai/30
+        ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'}
       `} />
 
       {/* Main node */}
       <div className="
         relative w-[200px] rounded-2xl overflow-hidden
-        bg-gradient-to-b from-bg-tertiary to-bg-secondary
-        border border-accent-pink/30
-        shadow-2xl shadow-black/50
+        bg-gradient-to-b from-bg-elevated to-bg-tertiary
+        border border-node-output/40
+        shadow-xl shadow-black/40
         transition-all duration-200
+        hover:border-node-output/60
       ">
         {/* Header accent line */}
-        <div className="h-1 bg-gradient-to-r from-accent-pink to-accent-purple/50" />
+        <div className="h-1 bg-gradient-to-r from-node-output via-node-ai/50 to-node-output/40" />
 
         {/* Content */}
         <div className="p-4">
           <div className="flex items-center gap-3">
             <div className="
               w-10 h-10 rounded-xl
-              bg-accent-pink/10 border border-accent-pink/20
+              bg-node-output/15 border border-node-output/30
               flex items-center justify-center
-              text-accent-pink
+              text-node-output
+              transition-transform group-hover:scale-105
             ">
               {getIcon()}
             </div>
@@ -90,11 +124,11 @@ export function LovableNode({ data, selected }: NodeProps) {
           </div>
 
           {/* Badge */}
-          <div className="mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-accent-pink/10 border border-accent-pink/20">
-            <svg className="w-3 h-3 text-accent-pink" viewBox="0 0 24 24" fill="currentColor">
+          <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-node-output/10 border border-node-output/20">
+            <svg className="w-3 h-3 text-node-output" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
             </svg>
-            <span className="text-[10px] font-medium text-accent-pink">Lovable</span>
+            <span className="text-[10px] font-semibold text-node-output">Lovable</span>
           </div>
         </div>
       </div>
@@ -104,8 +138,8 @@ export function LovableNode({ data, selected }: NodeProps) {
         type="target"
         position={Position.Top}
         className="
-          !w-3 !h-3 !bg-bg-tertiary !border-2 !border-accent-pink
-          hover:!bg-accent-pink hover:!scale-125 transition-all
+          !w-3 !h-3 !bg-bg-tertiary !border-2 !border-node-output
+          hover:!bg-node-output hover:!scale-150 !transition-all !duration-200
         "
       />
 
@@ -114,8 +148,8 @@ export function LovableNode({ data, selected }: NodeProps) {
         type="source"
         position={Position.Bottom}
         className="
-          !w-3 !h-3 !bg-bg-tertiary !border-2 !border-accent-pink
-          hover:!bg-accent-pink hover:!scale-125 transition-all
+          !w-3 !h-3 !bg-bg-tertiary !border-2 !border-node-output
+          hover:!bg-node-output hover:!scale-150 !transition-all !duration-200
         "
       />
     </div>

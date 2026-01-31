@@ -116,7 +116,7 @@ export function WorkflowCanvas({
           type: 'smoothstep',
           animated: true,
           style: {
-            stroke: 'rgba(139, 92, 246, 0.5)',
+            stroke: 'rgba(0, 240, 255, 0.4)',
             strokeWidth: 2,
           },
         }}
@@ -124,40 +124,40 @@ export function WorkflowCanvas({
       >
         <Background
           variant={BackgroundVariant.Dots}
-          gap={24}
+          gap={20}
           size={1}
-          color="rgba(255, 255, 255, 0.03)"
+          color="rgba(255, 255, 255, 0.04)"
         />
         <Controls />
         <MiniMap
           nodeColor={(node) => {
             switch (node.type) {
               case 'trigger':
-                return '#22c55e';
+                return '#00ff94';
               case 'action':
-                return '#3b82f6';
+                return '#4d7cff';
               case 'ai':
-                return '#8b5cf6';
+                return '#a855f7';
               case 'condition':
-                return '#f59e0b';
+                return '#ffb800';
               case 'lovable':
-                return '#ec4899';
+                return '#ff2d92';
               case 'firecrawl':
-                return '#f97316';
+                return '#ff6b35';
               case 'reducto':
-                return '#06b6d4';
+                return '#00f0ff';
               case 'resend':
-                return '#8b5cf6';
+                return '#a855f7';
               case 'approval':
-                return '#f59e0b';
+                return '#ffb800';
               default:
-                return '#6b7280';
+                return '#4a4a55';
             }
           }}
           nodeStrokeWidth={3}
-          maskColor="rgba(10, 10, 15, 0.9)"
+          maskColor="rgba(3, 3, 8, 0.92)"
           style={{
-            backgroundColor: 'rgba(18, 18, 26, 0.9)',
+            backgroundColor: 'rgba(12, 12, 20, 0.95)',
           }}
         />
       </ReactFlow>

@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react';
 import { WorkflowCanvas } from './components/WorkflowCanvas';
-import { Sidebar } from './components/Sidebar';
 import { ExecutionLog } from './components/ExecutionLog';
-import { ChatPanel } from './components/ChatPanel';
-import { DemoControls } from './components/DemoControls';
 import { NodeDebugPanel } from './components/NodeDebugPanel';
 import { useWorkflowStore } from './stores/workflowStore';
 import { useWebSocket } from './hooks/useWebSocket';
 
 function App() {
-  const { nodes, edges, setNodes, setEdges, setIsExecuting, clearLogs, clearDebugData, ticker } = useWorkflowStore();
+  const { nodes, edges, setNodes, setEdges, setIsExecuting, clearLogs, clearDebugData, ticker, setTicker } = useWorkflowStore();
   const [isRunning, setIsRunning] = useState(false);
   useWebSocket();
 
@@ -24,7 +21,6 @@ function App() {
     setIsRunning(true);
     setIsExecuting(true);
 
-    // Build trigger data with dynamic stock input from store
     const triggerData = {
       type: 'manual',
       timestamp: new Date().toISOString(),
@@ -48,7 +44,6 @@ function App() {
     }
   };
 
-  // Load initial workflow
   useEffect(() => {
     fetch('/api/webhook/current-workflow')
       .then((res) => res.json())
@@ -60,7 +55,6 @@ function App() {
       })
       .catch((err) => {
         console.error('Failed to load workflow:', err);
-        // Set default workflow if API fails
         setNodes([
           {
             id: '1',
@@ -103,72 +97,107 @@ function App() {
   }, [setNodes, setEdges]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-bg-primary">
-      {/* Sidebar */}
-      <Sidebar />
-
+    <div className="flex h-screen w-screen overflow-hidden bg-bg-primary bg-mesh">
       {/* Main canvas area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="h-14 glass-panel flex items-center justify-between px-4 border-b border-glass-border">
+        <header className="h-16 glass-panel flex items-center justify-between px-5 border-b border-glass-border relative overflow-hidden">
+          {/* Subtle scan line effect */}
+          <div className="absolute inset-0 pointer-events-none opacity-30">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-accent-cyan/5 to-transparent" />
+          </div>
+
           {/* Left: Logo + Title */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-5 relative z-10">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent-purple to-accent-pink flex items-center justify-center shadow-lg shadow-accent-purple/20">
-                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+              {/* Logo */}
+              <div className="relative">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-cyan via-accent-blue to-accent-purple flex items-center justify-center">
+                  <svg className="w-5 h-5 text-bg-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                {/* Glow effect */}
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-accent-cyan to-accent-purple blur-lg opacity-40" />
               </div>
               <div>
-                <h1 className="text-base font-semibold text-text-primary">FlowForge</h1>
-                <p className="text-[11px] text-text-tertiary">Self-adapting workflows</p>
+                <h1 className="text-lg font-display font-bold text-gradient-cyan tracking-tight">Executor</h1>
+                <p className="text-[11px] text-text-tertiary font-medium tracking-wide uppercase">Workflow Engine</p>
               </div>
             </div>
 
             <div className="h-8 w-px bg-glass-border" />
 
             <div className="hidden md:block">
-              <p className="text-sm text-text-secondary">
-                Adaptive E-commerce Flow
+              <p className="text-sm text-text-secondary font-medium">
+                Adaptive Automation
               </p>
             </div>
           </div>
 
           {/* Center: Status */}
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent-green/10 border border-accent-green/20">
-            <div className="w-2 h-2 rounded-full bg-accent-green animate-pulse" />
-            <span className="text-xs font-medium text-accent-green">Live</span>
+          <div className="hidden sm:flex items-center gap-2.5 px-4 py-2 rounded-full bg-accent-green/5 border border-accent-green/20">
+            <div className="relative">
+              <div className="w-2 h-2 rounded-full bg-accent-green" />
+              <div className="absolute inset-0 rounded-full bg-accent-green animate-ping opacity-75" />
+            </div>
+            <span className="text-xs font-semibold text-accent-green tracking-wide uppercase">Live</span>
           </div>
 
-          {/* Right: Actions */}
-          <div className="flex items-center gap-3">
-            <button className="hidden sm:flex px-3 py-1.5 rounded-lg text-sm font-medium bg-glass-bg border border-glass-border text-text-secondary hover:bg-glass-highlight hover:text-text-primary transition-all">
-              Save
-            </button>
+          {/* Right: Ticker Input + Actions */}
+          <div className="flex items-center gap-4 relative z-10">
+            {/* Ticker Input */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-text-tertiary font-medium uppercase tracking-wide">Ticker</label>
+              <input
+                type="text"
+                value={ticker}
+                onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                placeholder="AAPL"
+                className="
+                  w-24 px-3 py-2 rounded-lg
+                  bg-bg-secondary/50 border border-glass-border
+                  text-sm font-mono font-semibold text-accent-cyan
+                  placeholder:text-text-tertiary
+                  focus:outline-none focus:border-accent-cyan/40 focus:bg-bg-secondary
+                  focus:shadow-[0_0_0_3px_rgba(0,240,255,0.1)]
+                  transition-all duration-200
+                  uppercase
+                "
+              />
+            </div>
+
+            <div className="h-8 w-px bg-glass-border" />
+
             <button
               onClick={runWorkflow}
               disabled={isRunning}
               className={`
-                px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 transition-all
+                group relative px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2.5 transition-all duration-200 overflow-hidden
                 ${isRunning
-                  ? 'bg-accent-green/20 text-accent-green cursor-wait'
-                  : 'bg-gradient-to-r from-accent-green to-accent-green/80 text-white shadow-lg shadow-accent-green/25 hover:shadow-accent-green/40 hover:scale-[1.02]'}
+                  ? 'bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20'
+                  : 'btn-primary'}
               `}
             >
+              {/* Hover gradient overlay */}
+              {!isRunning && (
+                <div className="absolute inset-0 bg-gradient-to-r from-accent-cyan/0 via-white/20 to-accent-cyan/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
+              )}
+
               {isRunning ? (
                 <>
                   <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  <span>Running...</span>
+                  <span>Executing...</span>
                 </>
               ) : (
                 <>
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <svg className="w-4 h-4 relative z-10" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M8 5v14l11-7z" />
                   </svg>
-                  <span>Run Workflow</span>
+                  <span className="relative z-10">Execute</span>
                 </>
               )}
             </button>
@@ -176,7 +205,7 @@ function App() {
         </header>
 
         {/* Canvas */}
-        <div className="flex-1 relative bg-pattern">
+        <div className="flex-1 relative bg-dots">
           <WorkflowCanvas
             initialNodes={nodes}
             initialEdges={edges}
@@ -186,12 +215,6 @@ function App() {
 
       {/* Right panel - Execution Log */}
       <ExecutionLog />
-
-      {/* AI Chat Panel */}
-      <ChatPanel />
-
-      {/* Demo Controls */}
-      <DemoControls />
 
       {/* Node Debug Panel */}
       <NodeDebugPanel />
