@@ -39,7 +39,7 @@ let currentWorkflow = {
       id: 'fc-docs',
       type: 'firecrawl',
       position: { x: 700, y: 150 },
-      data: { label: 'Find SEC Filings', mode: 'search', query: 'NVIDIA 10-K SEC filing 2024 filetype:pdf', limit: 2 },
+      data: { label: 'Find Earnings Report', mode: 'search', query: 'NVIDIA quarterly earnings press release Q4 2024 filetype:pdf', limit: 2 },
     },
 
     // Document parsing (connected to fc-docs)
@@ -47,7 +47,7 @@ let currentWorkflow = {
       id: 'reducto-1',
       type: 'reducto',
       position: { x: 700, y: 300 },
-      data: { label: 'Parse SEC Filing', mode: 'parse' },
+      data: { label: 'Parse Earnings Report', mode: 'parse' },
     },
 
     // FAN-IN: AI combines all data
