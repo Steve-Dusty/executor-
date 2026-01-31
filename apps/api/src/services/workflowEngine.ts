@@ -222,6 +222,7 @@ export class WorkflowEngine {
 
   /**
    * Execute AI node using BubbleLab's AIAgentBubble with OpenAI
+   * Enhanced to handle RAG context for historical comparison
    */
   private async executeAINode(
     data: Record<string, unknown>,
@@ -232,11 +233,46 @@ export class WorkflowEngine {
       throw new Error('OPENAI_API_KEY is required for AI nodes');
     }
 
-    const prompt = (data.prompt as string) || 'Analyze the following data and provide insights.';
-    const inputSummary = JSON.stringify({ inputs, triggerData }, null, 2);
+    const userPrompt = (data.prompt as string) || 'Analyze the following data and provide insights.';
+
+    // Extract and format different input types
+    const { currentData, historicalData, ticker } = this.categorizeInputs(inputs, triggerData);
+
+    // Build enhanced prompt with RAG context
+    let fullPrompt = '';
+
+    if (historicalData.length > 0) {
+      // Enhanced prompt for RAG-based reasoning
+      fullPrompt = `You are a financial analyst. Your task is to analyze current events in the context of historical data and explain WHY changes matter.
+
+## Your Analysis Must Include:
+1. **What Changed**: Summarize the current event/news
+2. **Historical Context**: Compare against the historical data provided
+3. **Why It Matters**: Explain the significance based on historical patterns
+4. **Recommended Action**: What should be done and why (based on evidence)
+
+## Current Data (Real-time):
+${currentData.map(d => `- ${d.source}: ${d.content}`).join('\n')}
+
+## Historical Context (from RAG):
+${historicalData.map(d => `- [${d.date}] ${d.title}: ${d.excerpt}`).join('\n')}
+
+## Ticker: ${ticker || 'Unknown'}
+
+## User Request:
+${userPrompt}
+
+Provide your analysis with clear reasoning based on the historical context. Be specific about how past performance informs current recommendations.`;
+    } else {
+      // Standard prompt without RAG
+      const inputSummary = JSON.stringify({ inputs, triggerData }, null, 2);
+      fullPrompt = `${userPrompt}\n\nInput Data:\n${inputSummary}`;
+    }
+
+    console.log('[AI] Executing with RAG context:', historicalData.length > 0 ? 'Yes' : 'No');
 
     const aiAgent = new AIAgentBubble({
-      message: `${prompt}\n\nInput Data:\n${inputSummary}`,
+      message: fullPrompt,
       model: {
         model: 'openai/gpt-5-mini',
       },
@@ -246,7 +282,87 @@ export class WorkflowEngine {
     });
 
     const result = await aiAgent.action();
-    return result;
+
+    // Attach metadata about what context was used
+    return {
+      ...result,
+      _meta: {
+        usedRagContext: historicalData.length > 0,
+        ragResultsCount: historicalData.length,
+        ticker,
+      }
+    };
+  }
+
+  /**
+   * Categorize inputs into current data vs historical (RAG) data
+   */
+  private categorizeInputs(
+    inputs: Record<string, unknown>,
+    triggerData: Record<string, unknown>
+  ): {
+    currentData: Array<{ source: string; content: string }>;
+    historicalData: Array<{ title: string; date: string; excerpt: string; score: number }>;
+    ticker: string | null;
+  } {
+    const currentData: Array<{ source: string; content: string }> = [];
+    const historicalData: Array<{ title: string; date: string; excerpt: string; score: number }> = [];
+    let ticker: string | null = (triggerData.ticker as string) || null;
+
+    for (const [nodeId, nodeData] of Object.entries(inputs)) {
+      const data = nodeData as Record<string, unknown>;
+
+      // Check for RAG results (from mongo_rag node)
+      if (data?.data && typeof data.data === 'object') {
+        const ragData = data.data as {
+          results?: Array<{ title: string; date: string; excerpt: string; score: number; ticker?: string }>;
+          method?: string;
+        };
+
+        if (ragData.results && ragData.method) {
+          // This is RAG output
+          console.log(`[AI] Found RAG results from ${nodeId}: ${ragData.results.length} items`);
+          historicalData.push(...ragData.results);
+          if (ragData.results[0]?.ticker) {
+            ticker = ragData.results[0].ticker;
+          }
+          continue;
+        }
+
+        // Check for Firecrawl search results (current news)
+        const fcData = data.data as { results?: Array<{ title?: string; description?: string; content?: string }> };
+        if (fcData.results && Array.isArray(fcData.results)) {
+          fcData.results.forEach((r, i) => {
+            currentData.push({
+              source: `News ${i + 1}`,
+              content: `${r.title || ''}: ${r.description || r.content?.slice(0, 300) || ''}`,
+            });
+          });
+          continue;
+        }
+
+        // Check for Firecrawl scrape result
+        const scrapeData = data.data as { content?: string; url?: string };
+        if (scrapeData.content) {
+          currentData.push({
+            source: scrapeData.url || 'Scraped Page',
+            content: scrapeData.content.slice(0, 500),
+          });
+          continue;
+        }
+
+        // Check for Reducto extracted data
+        const reductoData = data.data as { extracted?: Record<string, unknown> };
+        if (reductoData.extracted) {
+          currentData.push({
+            source: 'SEC Filing Extract',
+            content: JSON.stringify(reductoData.extracted, null, 2),
+          });
+        }
+      }
+    }
+
+    return { currentData, historicalData, ticker };
   }
 
   /**
@@ -596,25 +712,74 @@ Return ONLY valid JSON, no markdown code blocks.`;
       }
     }
 
+    // Organize findings into logical sections
+    const hasRagContext = 'Historical Context (RAG)' in findings;
+    const hasReasoningBasis = 'Reasoning Basis' in findings;
+
+    // Build sections with special formatting for RAG content
     const sections = Object.entries(findings).map(([key, value]) => {
       let content: string;
+      let sectionClass = '';
+      let icon = '';
+
+      // Determine section styling based on type
+      if (key === 'AI Analysis') {
+        sectionClass = 'ai-analysis';
+        icon = '🤖';
+      } else if (key === 'Historical Context (RAG)') {
+        sectionClass = 'historical-context';
+        icon = '📚';
+      } else if (key === 'Current News') {
+        sectionClass = 'current-news';
+        icon = '📰';
+      } else if (key === 'Reasoning Basis') {
+        sectionClass = 'reasoning-basis';
+        icon = '💡';
+      } else if (key === 'Extracted Data') {
+        icon = '📊';
+      }
+
       if (typeof value === 'string') {
-        content = `<p style="white-space: pre-wrap;">${value}</p>`;
+        // Format AI analysis with markdown-like parsing
+        if (key === 'AI Analysis') {
+          content = this.formatAiAnalysis(value);
+        } else {
+          content = `<p style="white-space: pre-wrap;">${value}</p>`;
+        }
       } else if (Array.isArray(value)) {
-        content = `<ul>${value.map(item => {
-          if (typeof item === 'object' && item !== null) {
-            const obj = item as Record<string, unknown>;
-            return `<li><strong>${obj.title || 'Item'}</strong><br/><a href="${obj.url}">${obj.url}</a></li>`;
-          }
-          return `<li>${String(item)}</li>`;
-        }).join('')}</ul>`;
+        // Special formatting for historical context
+        if (key === 'Historical Context (RAG)') {
+          content = this.formatHistoricalContext(value as Array<{ title: string; date: string; excerpt: string; relevanceScore: string }>);
+        } else if (key === 'Current News') {
+          content = this.formatCurrentNews(value as Array<{ title: string; url: string; description?: string }>);
+        } else {
+          content = `<ul>${value.map(item => {
+            if (typeof item === 'object' && item !== null) {
+              const obj = item as Record<string, unknown>;
+              return `<li><strong>${obj.title || 'Item'}</strong><br/><a href="${obj.url}">${obj.url}</a></li>`;
+            }
+            return `<li>${String(item)}</li>`;
+          }).join('')}</ul>`;
+        }
       } else if (typeof value === 'object' && value !== null) {
         content = `<pre style="background: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto;">${JSON.stringify(value, null, 2)}</pre>`;
       } else {
         content = `<p>${String(value)}</p>`;
       }
-      return `<div style="margin-bottom: 20px;"><h3 style="color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px;">${key}</h3>${content}</div>`;
+
+      return `<div class="section ${sectionClass}" style="margin-bottom: 24px;">
+        <h3 style="color: #4f46e5; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 16px;">${icon} ${key}</h3>
+        ${content}
+      </div>`;
     }).join('');
+
+    // Add RAG context banner if used
+    const ragBanner = hasRagContext ? `
+      <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 4px solid #f59e0b; padding: 12px 16px; margin-bottom: 20px; border-radius: 0 8px 8px 0;">
+        <strong>📚 Historical Analysis Enabled</strong>
+        <p style="margin: 4px 0 0 0; font-size: 14px; color: #92400e;">This report includes reasoning based on historical data from your document archive.</p>
+      </div>
+    ` : '';
 
     return `
 <!DOCTYPE html>
@@ -624,8 +789,18 @@ Return ONLY valid JSON, no markdown code blocks.`;
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 700px; margin: 0 auto; padding: 20px; }
     .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; }
     .content { background: #fff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px; }
-    h3 { color: #4f46e5; }
+    .section { background: #fafafa; padding: 16px; border-radius: 8px; }
+    .section.ai-analysis { background: #f0f9ff; border-left: 4px solid #3b82f6; }
+    .section.historical-context { background: #fefce8; border-left: 4px solid #eab308; }
+    .section.reasoning-basis { background: #f0fdf4; border-left: 4px solid #22c55e; }
+    .section.current-news { background: #faf5ff; border-left: 4px solid #a855f7; }
+    h3 { color: #4f46e5; margin-top: 0; }
     a { color: #4f46e5; }
+    .historical-item { background: white; padding: 12px; border-radius: 6px; margin-bottom: 8px; border: 1px solid #e5e7eb; }
+    .historical-item .date { color: #6b7280; font-size: 12px; }
+    .historical-item .score { background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+    .news-item { padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+    .news-item:last-child { border-bottom: none; }
     .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 12px; }
   </style>
 </head>
@@ -635,14 +810,62 @@ Return ONLY valid JSON, no markdown code blocks.`;
     <p>Generated on ${new Date().toLocaleString()}</p>
   </div>
   <div class="content">
+    ${ragBanner}
     ${sections || '<p>No findings to report.</p>'}
   </div>
   <div class="footer">
-    <p>This report was automatically generated by your workflow system.</p>
+    <p>This report was automatically generated by your workflow system with RAG-enhanced reasoning.</p>
   </div>
 </body>
 </html>
     `.trim();
+  }
+
+  /**
+   * Format AI analysis with better structure
+   */
+  private formatAiAnalysis(text: string): string {
+    // Convert markdown-like headers and lists to HTML
+    let html = text
+      .replace(/^## (.+)$/gm, '<h4 style="color: #1e40af; margin-top: 16px;">$1</h4>')
+      .replace(/^### (.+)$/gm, '<h5 style="color: #3b82f6; margin-top: 12px;">$1</h5>')
+      .replace(/^\*\*(.+?)\*\*/gm, '<strong>$1</strong>')
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/\n/g, '<br/>');
+
+    // Wrap loose list items in ul
+    html = html.replace(/(<li>.*<\/li>)+/g, '<ul style="margin: 8px 0;">$&</ul>');
+
+    return `<div style="white-space: pre-wrap;">${html}</div>`;
+  }
+
+  /**
+   * Format historical context from RAG
+   */
+  private formatHistoricalContext(items: Array<{ title: string; date: string; excerpt: string; relevanceScore: string }>): string {
+    return items.map(item => `
+      <div class="historical-item">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <strong>${item.title}</strong>
+          <span class="score">${item.relevanceScore} match</span>
+        </div>
+        <div class="date">📅 ${item.date}</div>
+        <p style="margin: 8px 0 0 0; font-size: 14px; color: #4b5563;">${item.excerpt}</p>
+      </div>
+    `).join('');
+  }
+
+  /**
+   * Format current news items
+   */
+  private formatCurrentNews(items: Array<{ title: string; url: string; description?: string }>): string {
+    return items.map(item => `
+      <div class="news-item">
+        <strong><a href="${item.url}" style="text-decoration: none;">${item.title}</a></strong>
+        ${item.description ? `<p style="margin: 4px 0 0 0; font-size: 14px; color: #6b7280;">${item.description}</p>` : ''}
+      </div>
+    `).join('');
   }
 
   /**
@@ -684,18 +907,42 @@ Return ONLY valid JSON, no markdown code blocks.`;
 
   /**
    * Extract meaningful findings from node inputs for email display
+   * Enhanced to include RAG historical context with reasoning
    */
   private extractFindings(inputs: Record<string, unknown>): Record<string, unknown> {
     const findings: Record<string, unknown> = {};
+    const historicalContext: Array<{ title: string; date: string; excerpt: string; score: number }> = [];
+    let aiUsedRag = false;
 
     for (const [nodeId, nodeData] of Object.entries(inputs)) {
       const data = nodeData as Record<string, unknown>;
 
-      // Extract AI response
+      // Extract AI response (check for RAG metadata)
       if (data?.data && typeof data.data === 'object') {
         const aiData = data.data as Record<string, unknown>;
         if (aiData.response) {
           findings['AI Analysis'] = aiData.response;
+        }
+        // Check if AI used RAG context
+        if (data._meta && typeof data._meta === 'object') {
+          const meta = data._meta as { usedRagContext?: boolean };
+          if (meta.usedRagContext) {
+            aiUsedRag = true;
+          }
+        }
+      }
+
+      // Extract RAG results (historical context from mongo_rag node)
+      if (data?.data && typeof data.data === 'object') {
+        const ragData = data.data as {
+          results?: Array<{ title: string; date: string; excerpt: string; score: number; collection?: string }>;
+          method?: string;
+          query?: string;
+        };
+
+        if (ragData.results && ragData.method) {
+          console.log(`[Findings] Found RAG results: ${ragData.results.length} items`);
+          historicalContext.push(...ragData.results);
         }
       }
 
@@ -705,10 +952,12 @@ Return ONLY valid JSON, no markdown code blocks.`;
         if (fcData.extracted) {
           findings['Extracted Data'] = fcData.extracted;
         }
-        if (fcData.results && Array.isArray(fcData.results)) {
-          findings[`Search Results (${nodeId})`] = fcData.results.map((r: Record<string, unknown>) => ({
+        if (fcData.results && Array.isArray(fcData.results) && !data.data.hasOwnProperty('method')) {
+          // Only add as search results if not RAG (RAG has 'method' field)
+          findings['Current News'] = (fcData.results as Array<Record<string, unknown>>).slice(0, 5).map((r) => ({
             title: r.title,
             url: r.url,
+            description: r.description,
           }));
         }
       }
@@ -717,13 +966,27 @@ Return ONLY valid JSON, no markdown code blocks.`;
       if (data?.data && typeof data.data === 'object') {
         const reductoData = data.data as { text?: string; pages?: number };
         if (reductoData.text) {
-          // Truncate long text
           const text = reductoData.text as string;
           findings['Parsed Document'] = text.length > 500 ? text.slice(0, 500) + '...' : text;
         }
         if (reductoData.pages) {
           findings['Document Pages'] = reductoData.pages;
         }
+      }
+    }
+
+    // Add historical context section if RAG was used
+    if (historicalContext.length > 0) {
+      findings['Historical Context (RAG)'] = historicalContext.map(item => ({
+        title: item.title,
+        date: item.date,
+        excerpt: item.excerpt.slice(0, 200) + (item.excerpt.length > 200 ? '...' : ''),
+        relevanceScore: Math.round(item.score * 100) + '%',
+      }));
+
+      // Add a note about reasoning basis
+      if (aiUsedRag) {
+        findings['Reasoning Basis'] = `Analysis based on ${historicalContext.length} historical documents from company filings, earnings reports, and news archives. AI recommendations are grounded in this historical context.`;
       }
     }
 
