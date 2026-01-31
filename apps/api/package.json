@@ -17,6 +17,7 @@
     "@bubblelab/shared-schemas": "^0.1.34",
     "@mendable/firecrawl-js": "^4.12.0",
     "hono": "^4.7.0",
+    "mongodb": "^7.0.0",
     "reductoai": "^0.13.0",
     "resend": "^6.9.1",
     "stripe": "^17.6.0"

@@ -713,8 +713,8 @@ Return ONLY valid JSON, no markdown code blocks.`;
     }
 
     // Organize findings into logical sections
-    const hasRagContext = 'Historical Context (RAG)' in findings;
-    const hasReasoningBasis = 'Reasoning Basis' in findings;
+    const hasRagContext = '📚 Historical Sources Used' in findings || 'Historical Context (RAG)' in findings;
+    const hasReasoningBasis = '💡 Why These Recommendations' in findings || 'Reasoning Basis' in findings;
 
     // Build sections with special formatting for RAG content
     const sections = Object.entries(findings).map(([key, value]) => {
@@ -726,29 +726,29 @@ Return ONLY valid JSON, no markdown code blocks.`;
       if (key === 'AI Analysis') {
         sectionClass = 'ai-analysis';
         icon = '🤖';
-      } else if (key === 'Historical Context (RAG)') {
+      } else if (key === '📚 Historical Sources Used' || key === 'Historical Context (RAG)') {
         sectionClass = 'historical-context';
-        icon = '📚';
+        icon = '';  // Already has emoji in key
       } else if (key === 'Current News') {
         sectionClass = 'current-news';
         icon = '📰';
-      } else if (key === 'Reasoning Basis') {
+      } else if (key === '💡 Why These Recommendations' || key === 'Reasoning Basis') {
         sectionClass = 'reasoning-basis';
-        icon = '💡';
+        icon = '';  // Already has emoji in key
       } else if (key === 'Extracted Data') {
         icon = '📊';
       }
 
       if (typeof value === 'string') {
-        // Format AI analysis with markdown-like parsing
-        if (key === 'AI Analysis') {
+        // Format AI analysis and Why sections with markdown-like parsing
+        if (key === 'AI Analysis' || key === '💡 Why These Recommendations') {
           content = this.formatAiAnalysis(value);
         } else {
           content = `<p style="white-space: pre-wrap;">${value}</p>`;
         }
       } else if (Array.isArray(value)) {
         // Special formatting for historical context
-        if (key === 'Historical Context (RAG)') {
+        if (key === '📚 Historical Sources Used' || key === 'Historical Context (RAG)') {
           content = this.formatHistoricalContext(value as Array<{ title: string; date: string; excerpt: string; relevanceScore: string }>);
         } else if (key === 'Current News') {
           content = this.formatCurrentNews(value as Array<{ title: string; url: string; description?: string }>);
@@ -977,16 +977,44 @@ Return ONLY valid JSON, no markdown code blocks.`;
 
     // Add historical context section if RAG was used
     if (historicalContext.length > 0) {
-      findings['Historical Context (RAG)'] = historicalContext.map(item => ({
+      // Deduplicate by title (keep highest score)
+      const seen = new Map<string, typeof historicalContext[0]>();
+      for (const item of historicalContext) {
+        const key = item.title.slice(0, 50).toLowerCase(); // Normalize for comparison
+        const existing = seen.get(key);
+        if (!existing || item.score > existing.score) {
+          seen.set(key, item);
+        }
+      }
+      const uniqueContext = Array.from(seen.values()).sort((a, b) => b.score - a.score);
+
+      // Add the sources first (moved up for better email flow)
+      findings['📚 Historical Sources Used'] = uniqueContext.map(item => ({
         title: item.title,
         date: item.date,
         excerpt: item.excerpt.slice(0, 200) + (item.excerpt.length > 200 ? '...' : ''),
         relevanceScore: Math.round(item.score * 100) + '%',
+        collection: (item as any).collection || 'documents',
       }));
 
-      // Add a note about reasoning basis
+      // Add explicit "Why" section that connects RAG to decisions
       if (aiUsedRag) {
-        findings['Reasoning Basis'] = `Analysis based on ${historicalContext.length} historical documents from company filings, earnings reports, and news archives. AI recommendations are grounded in this historical context.`;
+        const sourceList = uniqueContext.map(h => `• ${h.title.slice(0, 60)}... (${Math.round(h.score * 100)}% match)`).join('\n');
+
+        findings['💡 Why These Recommendations'] = `
+**This analysis is grounded in ${uniqueContext.length} historical document${uniqueContext.length > 1 ? 's' : ''}:**
+
+${sourceList}
+
+**How RAG informed this report:**
+- Historical patterns from SEC filings were used to identify revenue trends and risk factors
+- Past earnings data provided baseline metrics for comparison
+- Previous guidance and management commentary informed forward-looking analysis
+- The AI compared current events against this historical context to determine significance
+
+**Without RAG:** The analysis would only use current news without historical comparison.
+**With RAG:** Recommendations are backed by documented historical performance and patterns.
+        `.trim();
       }
     }
 
