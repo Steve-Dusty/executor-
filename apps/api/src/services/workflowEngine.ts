@@ -199,7 +199,7 @@ export class WorkflowEngine {
         return await this.executeAdaptationNode(allNodes, allEdges, triggerData, businessContext);
 
       case 'firecrawl':
-        return await this.executeFirecrawlNode(node.data, inputs);
+        return await this.executeFirecrawlNode(node.data, inputs, triggerData);
 
       case 'resend':
         return await this.executeResendNode(node.data, inputs);
@@ -466,7 +466,8 @@ Return ONLY valid JSON, no markdown code blocks.`;
    */
   private async executeFirecrawlNode(
     data: Record<string, unknown>,
-    inputs: Record<string, unknown>
+    inputs: Record<string, unknown>,
+    triggerData?: Record<string, unknown>
   ): Promise<unknown> {
     const mode = (data.mode as 'scrape' | 'crawl' | 'search' | 'extract' | 'map') || 'scrape';
     let url = data.url as string | undefined;
@@ -474,10 +475,15 @@ Return ONLY valid JSON, no markdown code blocks.`;
     let query = data.query as string | undefined;
     let prompt = data.prompt as string | undefined;
 
-    // Interpolate values from inputs if needed
-    if (url?.includes('{{')) url = this.interpolate(url, inputs);
-    if (query?.includes('{{')) query = this.interpolate(query, inputs);
-    if (prompt?.includes('{{')) prompt = this.interpolate(prompt, inputs);
+    console.log('[Firecrawl] triggerData received:', JSON.stringify(triggerData));
+    console.log('[Firecrawl] Before interpolation - url:', url, 'query:', query);
+
+    // Interpolate values from trigger data (simple {{field}} syntax)
+    if (url?.includes('{{')) url = this.interpolateSimple(url, triggerData || {});
+    if (query?.includes('{{')) query = this.interpolateSimple(query, triggerData || {});
+    if (prompt?.includes('{{')) prompt = this.interpolateSimple(prompt, triggerData || {});
+
+    console.log('[Firecrawl] After interpolation - url:', url, 'query:', query);
 
     // Auto-discover URLs from upstream firecrawl search results
     if (!url && !urls && mode !== 'search') {
@@ -810,6 +816,15 @@ Return ONLY valid JSON, no markdown code blocks.`;
     return template.replace(/\{\{(\w+)\.(\w+)\}\}/g, (_, nodeId, field) => {
       const nodeResult = context[nodeId] as Record<string, unknown> | undefined;
       return String(nodeResult?.[field] || '');
+    });
+  }
+
+  /**
+   * Simple interpolation for {{field}} syntax - pulls directly from context
+   */
+  private interpolateSimple(template: string, context: Record<string, unknown>): string {
+    return template.replace(/\{\{(\w+)\}\}/g, (_, field) => {
+      return String(context[field] || '');
     });
   }
 

@@ -30,6 +30,10 @@ interface WorkflowState {
   isExecuting: boolean;
   executingNodeId: string | null;
 
+  // Trigger input state
+  ticker: string;
+  company: string;
+
   // Debug state
   nodeDebugData: Record<string, NodeDebugData>;
   selectedDebugNodeId: string | null;
@@ -41,6 +45,10 @@ interface WorkflowState {
   clearLogs: () => void;
   setIsExecuting: (value: boolean) => void;
   setExecutingNodeId: (nodeId: string | null) => void;
+
+  // Trigger input actions
+  setTicker: (ticker: string) => void;
+  setCompany: (company: string) => void;
 
   // Debug actions
   setNodeDebugData: (nodeId: string, data: NodeDebugData) => void;
@@ -56,6 +64,10 @@ export const useWorkflowStore = create<WorkflowState>((set) => ({
   isExecuting: false,
   executingNodeId: null,
 
+  // Trigger input state
+  ticker: 'NVDA',
+  company: 'NVIDIA',
+
   // Debug state
   nodeDebugData: {},
   selectedDebugNodeId: null,
@@ -63,6 +75,10 @@ export const useWorkflowStore = create<WorkflowState>((set) => ({
   setNodes: (nodes) => set({ nodes }),
 
   setEdges: (edges) => set({ edges }),
+
+  setTicker: (ticker) => set({ ticker }),
+
+  setCompany: (company) => set({ company }),
 
   addExecutionLog: (log) =>
     set((state) => ({

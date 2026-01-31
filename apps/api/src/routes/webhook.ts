@@ -14,32 +14,38 @@ export const webhookRouter = new Hono();
 // Multi-branch workflow with fan-out and fan-in
 let currentWorkflow = {
   nodes: [
-    // TRIGGER
+    // TRIGGER - passes ticker & company to all nodes
     {
       id: 'trigger-1',
       type: 'trigger',
       position: { x: 400, y: 0 },
-      data: { label: 'Daily Update', triggerType: 'schedule', schedule: 'daily' },
+      data: {
+        label: 'Stock Research',
+        triggerType: 'manual',
+        // Default values - can be overridden at runtime
+        ticker: 'NVDA',
+        company: 'NVIDIA',
+      },
     },
 
-    // FAN-OUT: Three parallel research branches
+    // FAN-OUT: Three parallel research branches (dynamic queries)
     {
       id: 'fc-news',
       type: 'firecrawl',
       position: { x: 100, y: 150 },
-      data: { label: 'Search News', mode: 'search', query: 'NVIDIA stock news today', limit: 3 },
+      data: { label: 'Search News', mode: 'search', query: '{{company}} stock news today', limit: 3 },
     },
     {
       id: 'fc-prices',
       type: 'firecrawl',
       position: { x: 400, y: 150 },
-      data: { label: 'Get Stock Data', mode: 'extract', url: 'https://www.cnbc.com/quotes/NVDA', prompt: 'Extract stock price, percent change, volume, and market cap' },
+      data: { label: 'Get Stock Data', mode: 'extract', url: 'https://www.cnbc.com/quotes/{{ticker}}', prompt: 'Extract stock price, percent change, volume, and market cap for {{company}}' },
     },
     {
       id: 'fc-docs',
       type: 'firecrawl',
       position: { x: 700, y: 150 },
-      data: { label: 'Find Earnings Report', mode: 'search', query: 'NVIDIA quarterly earnings press release Q4 2024 filetype:pdf', limit: 2 },
+      data: { label: 'Find Earnings Report', mode: 'search', query: '{{company}} quarterly earnings press release 2024 filetype:pdf', limit: 2 },
     },
 
     // Document parsing (connected to fc-docs)
@@ -300,7 +306,15 @@ webhookRouter.post('/update-workflow', async (c) => {
 // Simulate a payment - creates trigger data and runs REAL workflow execution
 webhookRouter.post('/simulate-payment', async (c) => {
   const body = await c.req.json();
+  console.log('[Webhook] /simulate-payment body:', JSON.stringify(body));
+
   const amount = body.amount || 100;
+
+  // Dynamic stock input - defaults to NVIDIA
+  const ticker = body.ticker || 'NVDA';
+  const company = body.company || 'NVIDIA';
+
+  console.log('[Webhook] Using ticker:', ticker, 'company:', company);
 
   // Update business state
   updateBusinessState(amount);
@@ -311,6 +325,9 @@ webhookRouter.post('/simulate-payment', async (c) => {
     currency: 'usd',
     customerId: `cus_simulated_${Date.now()}`,
     timestamp: new Date().toISOString(),
+    // Dynamic stock data
+    ticker,
+    company,
   };
 
   // Execute workflow with REAL AI processing

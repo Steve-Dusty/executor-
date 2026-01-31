@@ -23,6 +23,7 @@ app.route('/approve', approveRouter);
 // Simulation endpoints (proxied from frontend)
 app.post('/simulate-payment', async (c) => {
   const body = await c.req.json();
+  console.log('[Proxy] /simulate-payment received:', JSON.stringify(body));
   // Forward to webhook router's simulate endpoint
   const response = await fetch(`http://localhost:${process.env.PORT || 3001}/webhook/simulate-payment`, {
     method: 'POST',

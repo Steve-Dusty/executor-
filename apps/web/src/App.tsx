@@ -9,7 +9,7 @@ import { useWorkflowStore } from './stores/workflowStore';
 import { useWebSocket } from './hooks/useWebSocket';
 
 function App() {
-  const { nodes, edges, setNodes, setEdges, setIsExecuting, clearLogs, clearDebugData } = useWorkflowStore();
+  const { nodes, edges, setNodes, setEdges, setIsExecuting, clearLogs, clearDebugData, ticker, company } = useWorkflowStore();
   const [isRunning, setIsRunning] = useState(false);
   useWebSocket();
 
@@ -24,11 +24,13 @@ function App() {
     setIsRunning(true);
     setIsExecuting(true);
 
-    // Find trigger node to determine trigger data
-    const triggerNode = nodes.find(n => n.type === 'trigger');
-    const triggerData = triggerNode?.data?.triggerType === 'stripe'
-      ? { type: 'payment', amount: 250, currency: 'usd', customerId: `cus_${Date.now()}`, timestamp: new Date().toISOString() }
-      : { type: 'manual', timestamp: new Date().toISOString() };
+    // Build trigger data with dynamic stock input from store
+    const triggerData = {
+      type: 'manual',
+      timestamp: new Date().toISOString(),
+      ticker,
+      company,
+    };
 
     try {
       await fetch('/api/execute', {
