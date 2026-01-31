@@ -1,0 +1,84 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+.turbo/
+.output/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Claude Code
+.claude/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+.vitest/
+playwright-report/
+test-results/
+
+# Cache
+.cache/
+.eslintcache
+.parcel-cache/
+*.tsbuildinfo
+.vercel/
+.netlify/
+
+# OS
+Thumbs.db
+*.tmp
+*.temp
+*~
+
+# Secrets (extra safety)
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+service-account*.json
+.env.local
+.env.*.local
+
+# Stripe CLI
+.stripe/
+
+# Bun
+bun.lockb
+bun.lock
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Misc
+.history/
+*.bak
