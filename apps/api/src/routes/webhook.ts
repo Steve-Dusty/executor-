@@ -51,64 +51,50 @@ let currentWorkflow = {
       data: { label: 'Find Earnings Report', mode: 'search', query: '{{ticker}} quarterly earnings report 2024 filetype:pdf', limit: 2 },
     },
 
-    // Document parsing (connected to fc-docs) - extracts structured financial data
+    // Document parsing (connected to fc-docs) - parse mode is MUCH faster than extract
     {
       id: 'reducto-1',
       type: 'reducto',
       position: { x: 700, y: 300 },
       data: {
-        label: 'Extract Financials',
-        mode: 'extract',
-        maxWaitMs: 120000, // 2 minutes for complex PDFs
-        schema: {
-          type: 'object',
-          properties: {
-            company_name: { type: 'string', description: 'Company name' },
-            fiscal_period: { type: 'string', description: 'Fiscal quarter/year (e.g., Q3 2024)' },
-            revenue: { type: 'string', description: 'Total revenue with currency' },
-            revenue_yoy_change: { type: 'string', description: 'Year-over-year revenue change percentage' },
-            net_income: { type: 'string', description: 'Net income with currency' },
-            earnings_per_share: { type: 'string', description: 'EPS (diluted)' },
-            gross_margin: { type: 'string', description: 'Gross margin percentage' },
-            guidance: { type: 'string', description: 'Forward guidance or outlook summary' },
-            key_highlights: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Top 3-5 key business highlights'
-            }
-          },
-          required: ['company_name', 'revenue']
-        }
+        label: 'Parse PDF',
+        mode: 'parse',  // Use parse mode - 10-15s vs 100+s for extract
+        maxWaitMs: 20000, // 20 second timeout
+        pageRange: { start: 1, end: 3 }, // First 3 pages have the summary
       },
     },
 
-    // FAN-IN: AI combines all data (structured + unstructured)
+    // FAN-IN: AI combines all data and extracts financial metrics
     {
       id: 'ai-combine',
       type: 'ai',
       position: { x: 400, y: 450 },
       data: {
-        label: 'Analyze & Combine',
+        label: 'Analyze & Extract',
         prompt: `You are a financial analyst. Analyze the provided data and create a comprehensive report.
 
 You will receive:
-1. NEWS DATA: Recent news articles about the company (sentiment analysis)
-2. STOCK DATA: Current stock price, volume, market cap from CNBC
-3. EARNINGS DATA: Structured financial metrics extracted from SEC filings including:
-   - Revenue & YoY growth
-   - Earnings per share (EPS)
-   - Gross margin & operating income
-   - Segment breakdown
-   - Forward guidance
+1. NEWS DATA: Recent news articles about the company
+2. STOCK DATA: Current stock price information
+3. DOCUMENT TEXT: Raw parsed text from earnings reports/SEC filings
 
-Create a structured analysis with:
+FIRST, extract these key metrics from the document text:
+- Company name
+- Fiscal period (e.g., Q3 2024)
+- Revenue (with YoY change if available)
+- Net income
+- Earnings per share (EPS)
+- Gross margin %
+- Forward guidance summary
+- Top 3-5 key highlights
+
+THEN, create a structured analysis with:
 - Executive Summary (2-3 sentences)
 - Key Financial Metrics (table format)
-- News Sentiment Analysis (bullish/bearish/neutral with reasoning)
-- Risk Factors
-- Investment Recommendation (Buy/Hold/Sell with confidence level)
+- News Sentiment (bullish/bearish/neutral)
+- Investment Recommendation (Buy/Hold/Sell with confidence)
 
-Be specific and cite actual numbers from the data provided.`
+Be specific and cite actual numbers from the data.`
       },
     },
 

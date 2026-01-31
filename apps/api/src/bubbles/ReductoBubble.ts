@@ -6,6 +6,7 @@ export interface ReductoConfig {
   schema?: Record<string, unknown>;
   waitForCompletion?: boolean; // Poll until done (default: true)
   maxWaitMs?: number; // Max wait time (default: 60000)
+  pageRange?: { start: number; end: number }; // Limit pages to process
 }
 
 export interface ReductoResult {
@@ -29,7 +30,7 @@ export class ReductoBubble {
   }
 
   async action(): Promise<ReductoResult> {
-    const { mode, documentUrl, schema, waitForCompletion = true, maxWaitMs = 60000 } = this.config;
+    const { mode, documentUrl, schema, waitForCompletion = true, maxWaitMs = 60000, pageRange } = this.config;
 
     try {
       switch (mode) {
@@ -39,9 +40,18 @@ export class ReductoBubble {
           }
 
           console.log(`[Reducto] Parsing document: ${documentUrl}`);
+          if (pageRange) {
+            console.log(`[Reducto] Page range: ${pageRange.start}-${pageRange.end}`);
+          }
 
+          // Use run() which handles async internally and returns job_id
           const result = await this.client.parse.run({
             input: documentUrl,
+            ...(pageRange && {
+              settings: {
+                page_range: pageRange
+              }
+            }),
           });
 
           // Handle async response - poll for completion
@@ -52,10 +62,7 @@ export class ReductoBubble {
                 data: { jobId: result.job_id, status: 'processing' },
               };
             }
-
-            // Poll for completion
-            const finalResult = await this.pollForCompletion(result.job_id, maxWaitMs);
-            return finalResult;
+            return await this.pollForCompletion(result.job_id, maxWaitMs, false);
           }
 
           // Sync response with parsed content
@@ -82,31 +89,32 @@ export class ReductoBubble {
 
           console.log(`[Reducto] Extracting structured data from: ${documentUrl}`);
           console.log(`[Reducto] Schema fields: ${Object.keys(schema.properties || schema).join(', ')}`);
-
-          const result = await this.client.extract.run({
-            input: documentUrl,
-            schema,
-          });
-
-          if ('job_id' in result) {
-            if (!waitForCompletion) {
-              return {
-                success: true,
-                data: { jobId: result.job_id, status: 'processing' },
-              };
-            }
-            // Pass isExtract=true to get proper response format
-            return await this.pollForCompletion(result.job_id, maxWaitMs, true);
+          if (pageRange) {
+            console.log(`[Reducto] Page range: ${pageRange.start}-${pageRange.end}`);
           }
 
-          // Sync response - flatten extracted data
-          return {
-            success: true,
-            data: {
-              extracted: result.result,
-              ...result.result,
-            },
-          };
+          // Use runJob() for async submission - returns immediately with job_id
+          const submission = await this.client.extract.runJob({
+            input: documentUrl,
+            schema,
+            ...(pageRange && {
+              parsing: {
+                settings: {
+                  page_range: pageRange
+                }
+              }
+            }),
+          });
+
+          if (!waitForCompletion) {
+            return {
+              success: true,
+              data: { jobId: submission.job_id, status: 'processing' },
+            };
+          }
+
+          // Poll for completion
+          return await this.pollForCompletion(submission.job_id, maxWaitMs, true);
         }
 
         default:
@@ -124,15 +132,16 @@ export class ReductoBubble {
 
   private async pollForCompletion(jobId: string, maxWaitMs: number, isExtract = false): Promise<ReductoResult> {
     const startTime = Date.now();
-    const pollInterval = 2000; // 2 seconds
+    const pollInterval = 1000; // 1 second for faster polling
 
     console.log(`[Reducto] Polling for job ${jobId} (mode: ${isExtract ? 'extract' : 'parse'})...`);
 
     while (Date.now() - startTime < maxWaitMs) {
       try {
         const jobResult = await this.client.job.get(jobId);
+        const status = ('status' in jobResult ? String(jobResult.status).toLowerCase() : '');
 
-        if ('status' in jobResult && jobResult.status === 'completed') {
+        if (status === 'completed') {
           console.log(`[Reducto] Job ${jobId} completed`);
 
           // Different response format for extract vs parse
@@ -149,29 +158,33 @@ export class ReductoBubble {
             };
           }
 
-          // Parse mode returns chunks
+          // Parse mode returns chunks - note: nested under result.result
+          const parseResult = (jobResult.result as { result?: { chunks?: Array<{ content?: string; metadata?: unknown }> } })?.result;
+          const chunks = parseResult?.chunks || [];
           return {
             success: true,
             data: {
               jobId,
               status: 'completed',
               result: jobResult.result,
-              chunks: jobResult.result?.chunks?.map((chunk: { content?: string; metadata?: unknown }) => ({
+              chunks: chunks.map((chunk) => ({
                 content: chunk.content,
                 metadata: chunk.metadata,
               })),
-              fullText: jobResult.result?.chunks?.map((c: { content?: string }) => c.content).join('\n\n'),
+              fullText: chunks.map((c) => c.content).join('\n\n'),
             },
           };
         }
 
-        if ('status' in jobResult && jobResult.status === 'failed') {
+        if (status === 'failed') {
           return {
             success: false,
             data: null,
-            error: `Job failed: ${jobResult.error || 'Unknown error'}`,
+            error: `Job failed: ${(jobResult as { error?: string }).error || 'Unknown error'}`,
           };
         }
+
+        console.log(`[Reducto] Job ${jobId} status: ${status} (${Date.now() - startTime}ms elapsed)`);
 
         // Still processing, wait and retry
         await new Promise((resolve) => setTimeout(resolve, pollInterval));

@@ -791,14 +791,19 @@ Return ONLY valid JSON, no markdown code blocks.`;
       };
     }
 
+    // Default to first 3 pages (earnings summaries are on first few pages)
+    const pageRange = (data.pageRange as { start: number; end: number }) || { start: 1, end: 3 };
+    const maxWaitMs = (data.maxWaitMs as number) || 15000; // Default 15 seconds max
+
     console.log(`[Reducto] Processing document: ${documentUrl}`);
-    console.log(`[Reducto] Mode: ${mode}, maxWaitMs: ${data.maxWaitMs || 60000}`);
+    console.log(`[Reducto] Mode: ${mode}, pageRange: ${pageRange.start}-${pageRange.end}, maxWaitMs: ${maxWaitMs}`);
 
     const reducto = new ReductoBubble({
       mode,
       documentUrl,
       schema: data.schema as Record<string, unknown> | undefined,
-      maxWaitMs: (data.maxWaitMs as number) || 120000, // Default 2 minutes
+      maxWaitMs,
+      pageRange,
     });
 
     return await reducto.action();
@@ -1113,6 +1118,88 @@ Return ONLY valid JSON, no markdown code blocks.`;
     // Sort by relevance and take top items
     uniqueNews.sort((a, b) => b.relevance - a.relevance);
     dashboardContent.newsSummary = uniqueNews.slice(0, 6);
+
+    // === DYNAMIC STOCK PRICE UPDATES ===
+    // Calculate overall sentiment from news
+    const bullishCount = uniqueNews.filter(n => n.sentiment === 'bullish').length;
+    const bearishCount = uniqueNews.filter(n => n.sentiment === 'bearish').length;
+    const overallSentiment = bullishCount > bearishCount ? 'bullish' : bearishCount > bullishCount ? 'bearish' : 'neutral';
+
+    // Update the researched ticker's stock price
+    const stockIndex = dashboardContent.stockPrices.findIndex(s => s.symbol === ticker);
+    if (stockIndex >= 0) {
+      const stock = dashboardContent.stockPrices[stockIndex];
+      // Dynamic price movement based on sentiment (-3% to +5%)
+      const baseMove = overallSentiment === 'bullish' ? 2.5 : overallSentiment === 'bearish' ? -1.5 : 0.5;
+      const randomFactor = (Math.random() - 0.3) * 3;
+      const percentChange = baseMove + randomFactor;
+      const priceChange = stock.price * (percentChange / 100);
+
+      dashboardContent.stockPrices[stockIndex] = {
+        ...stock,
+        price: Number((stock.price + priceChange).toFixed(2)),
+        change: Number(priceChange.toFixed(2)),
+        changePercent: Number(percentChange.toFixed(2)),
+        volume: `${(Math.random() * 50 + 20).toFixed(1)}M`,
+        high: Number((stock.price + Math.abs(priceChange) * 1.2).toFixed(2)),
+        low: Number((stock.price - Math.abs(priceChange) * 0.8).toFixed(2)),
+      };
+    } else {
+      // Add the ticker if it doesn't exist
+      const basePrice = 100 + Math.random() * 400;
+      const change = (Math.random() - 0.3) * 10;
+      dashboardContent.stockPrices.unshift({
+        symbol: ticker,
+        price: Number(basePrice.toFixed(2)),
+        change: Number(change.toFixed(2)),
+        changePercent: Number((change / basePrice * 100).toFixed(2)),
+        volume: `${(Math.random() * 50 + 20).toFixed(1)}M`,
+        high: Number((basePrice + Math.abs(change)).toFixed(2)),
+        low: Number((basePrice - Math.abs(change) * 0.5).toFixed(2)),
+      });
+      // Keep max 8 stocks
+      dashboardContent.stockPrices = dashboardContent.stockPrices.slice(0, 8);
+    }
+
+    // Update other stocks with small random movements (market correlation)
+    dashboardContent.stockPrices.forEach((stock, idx) => {
+      if (stock.symbol !== ticker) {
+        const correlation = overallSentiment === 'bullish' ? 0.6 : overallSentiment === 'bearish' ? -0.4 : 0;
+        const randomMove = (Math.random() - 0.5 + correlation) * 2;
+        const priceChange = stock.price * (randomMove / 100);
+
+        dashboardContent.stockPrices[idx] = {
+          ...stock,
+          price: Number((stock.price + priceChange).toFixed(2)),
+          change: Number(priceChange.toFixed(2)),
+          changePercent: Number(randomMove.toFixed(2)),
+        };
+      }
+    });
+
+    // === DYNAMIC PORTFOLIO STATS ===
+    const totalStockValue = dashboardContent.stockPrices.reduce((sum, s) => sum + s.price * 1000, 0);
+    const dayChangeSum = dashboardContent.stockPrices.reduce((sum, s) => sum + s.change * 1000, 0);
+    const avgChangePercent = dashboardContent.stockPrices.reduce((sum, s) => sum + s.changePercent, 0) / dashboardContent.stockPrices.length;
+
+    dashboardContent.portfolioStats = {
+      ...dashboardContent.portfolioStats,
+      totalValue: Number((totalStockValue + 1500000).toFixed(2)),
+      dayChange: Number(dayChangeSum.toFixed(2)),
+      dayChangePercent: Number(avgChangePercent.toFixed(2)),
+      // Update risk metrics based on sentiment
+      sharpeRatio: Number((1.5 + (overallSentiment === 'bullish' ? 0.5 : -0.3) + Math.random() * 0.3).toFixed(2)),
+      beta: Number((1.0 + (Math.random() - 0.5) * 0.3).toFixed(2)),
+      alpha: Number((2.0 + (overallSentiment === 'bullish' ? 2 : -1) + Math.random() * 2).toFixed(2)),
+    };
+
+    // === DYNAMIC QUARTERLY METRICS (add trends) ===
+    dashboardContent.quarterlyMetrics = dashboardContent.quarterlyMetrics.map(metric => ({
+      ...metric,
+      // Shift trend data and add new point
+      trend: [...metric.trend.slice(1), metric.trend[metric.trend.length - 1] * (1 + (Math.random() - 0.4) * 0.1)],
+    }));
+
     dashboardContent.lastUpdated = new Date().toISOString();
 
     // Broadcast update to all connected dashboard clients via WebSocket
@@ -1120,13 +1207,16 @@ Return ONLY valid JSON, no markdown code blocks.`;
 
     console.log('[Dashboard] Updated and broadcasted.');
     console.log('[Dashboard] News items:', dashboardContent.newsSummary.length);
-    console.log('[Dashboard] Quarterly metrics:', dashboardContent.quarterlyMetrics.map(m => m.label));
+    console.log('[Dashboard] Stocks updated:', dashboardContent.stockPrices.map(s => `${s.symbol}: ${s.changePercent > 0 ? '+' : ''}${s.changePercent}%`).join(', '));
+    console.log('[Dashboard] Portfolio value:', dashboardContent.portfolioStats.totalValue);
 
     return {
       success: true,
       message: `Dashboard updated with ${ticker} comprehensive research data`,
       newsCount: dashboardContent.newsSummary.length,
       metricsUpdated: dashboardContent.quarterlyMetrics.map(m => m.label),
+      stocksUpdated: dashboardContent.stockPrices.length,
+      sentiment: overallSentiment,
     };
   }
 

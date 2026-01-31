@@ -264,111 +264,53 @@ function MetricCard({ metric, index }: { metric: QuarterlyMetric; index: number 
   );
 }
 
-// Toast notification component - BIG and OBVIOUS
-function Toast({ message, isVisible, onClose, updatedSections }: {
+// Toast notification component - Top right, simple "NEW UPDATE!"
+function Toast({ message, isVisible, onClose }: {
   message: string;
   isVisible: boolean;
   onClose: () => void;
   updatedSections?: string[];
 }) {
-  const [progress, setProgress] = useState(100);
-
   useEffect(() => {
     if (isVisible) {
-      // Stay visible for 15 seconds
-      const duration = 15000;
-      const interval = 50;
-      const decrement = (100 / duration) * interval;
-
-      const progressTimer = setInterval(() => {
-        setProgress(prev => Math.max(0, prev - decrement));
-      }, interval);
-
-      const closeTimer = setTimeout(onClose, duration);
-
-      return () => {
-        clearInterval(progressTimer);
-        clearTimeout(closeTimer);
-        setProgress(100);
-      };
+      const timer = setTimeout(onClose, 10000); // 10 seconds
+      return () => clearTimeout(timer);
     }
   }, [isVisible, onClose]);
 
   if (!isVisible) return null;
 
   return (
-    <>
-      {/* Full screen flash effect */}
-      <div className="fixed inset-0 z-[99] pointer-events-none animate-pulse-once">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#00ff88]/10 to-transparent" />
-      </div>
+    <div className="fixed top-6 right-6 z-[100] animate-in slide-in-from-right-4 duration-300">
+      <div className="relative">
+        {/* Glow effect */}
+        <div className="absolute inset-0 bg-[#00ff88] rounded-xl blur-xl opacity-40 animate-pulse" />
 
-      {/* Main toast - centered and large */}
-      <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-4 zoom-in-95 duration-500">
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0a1a0f] via-[#0f1a14] to-[#0a1a0f] border-2 border-[#00ff88]/50 shadow-[0_0_60px_rgba(0,255,136,0.3)]">
-          {/* Animated border glow */}
-          <div className="absolute inset-0 rounded-2xl">
-            <div className="absolute inset-[-2px] bg-gradient-to-r from-[#00ff88] via-[#00d4ff] to-[#00ff88] rounded-2xl opacity-50 blur-sm animate-pulse" />
+        {/* Toast card */}
+        <div className="relative flex items-center gap-4 px-6 py-4 rounded-xl bg-[#0a1a0f] border-2 border-[#00ff88] shadow-[0_0_30px_rgba(0,255,136,0.4)]">
+          {/* Pulsing dot */}
+          <div className="relative">
+            <div className="absolute inset-0 w-3 h-3 bg-[#00ff88] rounded-full animate-ping" />
+            <div className="relative w-3 h-3 bg-[#00ff88] rounded-full" />
           </div>
 
-          {/* Content */}
-          <div className="relative px-8 py-6 flex items-center gap-6">
-            {/* Animated icon */}
-            <div className="relative">
-              <div className="absolute inset-0 bg-[#00ff88] rounded-full blur-xl opacity-50 animate-ping" />
-              <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-[#00ff88] to-[#00d4ff] flex items-center justify-center">
-                <svg className="w-8 h-8 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" strokeLinecap="round" strokeLinejoin="round"/>
-                  <polyline points="22 4 12 14.01 9 11.01" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-            </div>
-
-            {/* Text content */}
-            <div className="flex-1">
-              <div className="text-2xl font-bold text-[#00ff88] tracking-wide flex items-center gap-3">
-                {message}
-                <span className="inline-flex">
-                  <span className="animate-bounce delay-0">📊</span>
-                  <span className="animate-bounce delay-75">📈</span>
-                  <span className="animate-bounce delay-150">✨</span>
-                </span>
-              </div>
-              <div className="text-base text-white/80 mt-1">
-                Live data synced from workflow research
-              </div>
-              {updatedSections && updatedSections.length > 0 && (
-                <div className="flex gap-2 mt-3">
-                  {updatedSections.map((section, i) => (
-                    <span key={i} className="px-3 py-1 text-xs font-semibold bg-[#00ff88]/20 text-[#00ff88] rounded-full border border-[#00ff88]/30">
-                      {section}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Close button */}
-            <button
-              onClick={onClose}
-              className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round"/>
-              </svg>
-            </button>
+          {/* Text */}
+          <div className="text-lg font-bold text-[#00ff88] tracking-wide">
+            🚀 NEW UPDATE!
           </div>
 
-          {/* Progress bar */}
-          <div className="h-1 bg-black/30">
-            <div
-              className="h-full bg-gradient-to-r from-[#00ff88] to-[#00d4ff] transition-all duration-100 ease-linear"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+          {/* Close */}
+          <button
+            onClick={onClose}
+            className="ml-2 text-white/40 hover:text-white transition-colors"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round"/>
+            </svg>
+          </button>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -422,13 +364,11 @@ export function Dashboard() {
           });
           setLastUpdate(new Date());
 
-          // Show toast notification (skip on first load)
-          if (!isFirstLoad.current) {
-            setUpdatedSections(sections.length > 0 ? sections : ['Data']);
-            setToastMessage('NEW DATA AVAILABLE');
-            setShowToast(true);
-          }
-          isFirstLoad.current = false;
+          // ALWAYS show toast on updates
+          console.log('📢 DASHBOARD UPDATE RECEIVED - showing toast!');
+          setUpdatedSections(sections.length > 0 ? sections : ['Data']);
+          setToastMessage('NEW DATA AVAILABLE');
+          setShowToast(true);
         }
       } catch (e) {
         console.error('Failed to parse WebSocket message:', e);
