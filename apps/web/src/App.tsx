@@ -9,7 +9,7 @@ import { useWorkflowStore } from './stores/workflowStore';
 import { useWebSocket } from './hooks/useWebSocket';
 
 function App() {
-  const { nodes, edges, setNodes, setEdges, setIsExecuting, clearLogs, clearDebugData, ticker, company } = useWorkflowStore();
+  const { nodes, edges, setNodes, setEdges, setIsExecuting, clearLogs, clearDebugData, ticker } = useWorkflowStore();
   const [isRunning, setIsRunning] = useState(false);
   useWebSocket();
 
@@ -29,7 +29,6 @@ function App() {
       type: 'manual',
       timestamp: new Date().toISOString(),
       ticker,
-      company,
     };
 
     try {

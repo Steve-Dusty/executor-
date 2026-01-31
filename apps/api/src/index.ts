@@ -1,16 +1,20 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { webhookRouter, addWSConnection, removeWSConnection } from './routes/webhook';
+import { webhookRouter, addWSConnection, removeWSConnection, broadcast } from './routes/webhook';
 import { workflowRouter } from './routes/workflow';
 import { executeRouter } from './routes/execute';
 import { chatRouter } from './routes/chat';
 import { testRouter } from './routes/test';
 import { approveRouter } from './routes/approve';
+import { dashboardRouter, setDashboardBroadcast } from './routes/dashboard';
 
 const app = new Hono();
 
 // Middleware
 app.use('*', cors());
+
+// Wire up dashboard broadcast
+setDashboardBroadcast(broadcast);
 
 // Routes
 app.route('/webhook', webhookRouter);
@@ -19,6 +23,7 @@ app.route('/execute', executeRouter);
 app.route('/chat', chatRouter);
 app.route('/test', testRouter);
 app.route('/approve', approveRouter);
+app.route('/dashboard', dashboardRouter);
 
 // Simulation endpoints (proxied from frontend)
 app.post('/simulate-payment', async (c) => {

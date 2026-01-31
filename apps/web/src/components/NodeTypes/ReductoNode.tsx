@@ -4,6 +4,7 @@ interface ReductoNodeData extends Record<string, unknown> {
   label: string;
   mode: 'parse' | 'extract';
   documentUrl?: string;
+  schema?: { properties?: Record<string, unknown> };
   hasDebugData?: boolean;
   debugStatus?: 'running' | 'success' | 'error';
 }
@@ -49,9 +50,35 @@ export function ReductoNode({ data, selected }: NodeProps) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-text-primary truncate">{nodeData.label}</div>
-              <div className="text-xs text-text-tertiary capitalize">{nodeData.mode || 'parse'}</div>
+              <div className="text-xs text-text-tertiary capitalize flex items-center gap-1">
+                {nodeData.mode === 'extract' ? (
+                  <>
+                    <span className="text-cyan-400">⚡ Structured</span>
+                  </>
+                ) : (
+                  'parse'
+                )}
+              </div>
             </div>
           </div>
+          {/* Show schema fields for extract mode */}
+          {nodeData.mode === 'extract' && nodeData.schema?.properties && (
+            <div className="mt-2 pt-2 border-t border-glass-border">
+              <div className="text-[10px] text-text-tertiary mb-1">Extracting:</div>
+              <div className="flex flex-wrap gap-1">
+                {Object.keys(nodeData.schema.properties).slice(0, 4).map((field) => (
+                  <span key={field} className="px-1.5 py-0.5 text-[9px] bg-cyan-500/10 text-cyan-400 rounded">
+                    {field.replace(/_/g, ' ')}
+                  </span>
+                ))}
+                {Object.keys(nodeData.schema.properties).length > 4 && (
+                  <span className="px-1.5 py-0.5 text-[9px] bg-cyan-500/10 text-cyan-400 rounded">
+                    +{Object.keys(nodeData.schema.properties).length - 4} more
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

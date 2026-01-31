@@ -80,7 +80,8 @@ export class ReductoBubble {
             throw new Error('schema is required for extract mode');
           }
 
-          console.log(`[Reducto] Extracting from document: ${documentUrl}`);
+          console.log(`[Reducto] Extracting structured data from: ${documentUrl}`);
+          console.log(`[Reducto] Schema fields: ${Object.keys(schema.properties || schema).join(', ')}`);
 
           const result = await this.client.extract.run({
             input: documentUrl,
@@ -94,12 +95,17 @@ export class ReductoBubble {
                 data: { jobId: result.job_id, status: 'processing' },
               };
             }
-            return await this.pollForCompletion(result.job_id, maxWaitMs);
+            // Pass isExtract=true to get proper response format
+            return await this.pollForCompletion(result.job_id, maxWaitMs, true);
           }
 
+          // Sync response - flatten extracted data
           return {
             success: true,
-            data: { extracted: result.result },
+            data: {
+              extracted: result.result,
+              ...result.result,
+            },
           };
         }
 
@@ -116,11 +122,11 @@ export class ReductoBubble {
     }
   }
 
-  private async pollForCompletion(jobId: string, maxWaitMs: number): Promise<ReductoResult> {
+  private async pollForCompletion(jobId: string, maxWaitMs: number, isExtract = false): Promise<ReductoResult> {
     const startTime = Date.now();
     const pollInterval = 2000; // 2 seconds
 
-    console.log(`[Reducto] Polling for job ${jobId}...`);
+    console.log(`[Reducto] Polling for job ${jobId} (mode: ${isExtract ? 'extract' : 'parse'})...`);
 
     while (Date.now() - startTime < maxWaitMs) {
       try {
@@ -128,6 +134,22 @@ export class ReductoBubble {
 
         if ('status' in jobResult && jobResult.status === 'completed') {
           console.log(`[Reducto] Job ${jobId} completed`);
+
+          // Different response format for extract vs parse
+          if (isExtract) {
+            return {
+              success: true,
+              data: {
+                jobId,
+                status: 'completed',
+                extracted: jobResult.result,
+                // Flatten extracted data for easier downstream access
+                ...jobResult.result,
+              },
+            };
+          }
+
+          // Parse mode returns chunks
           return {
             success: true,
             data: {

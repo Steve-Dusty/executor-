@@ -32,7 +32,6 @@ interface WorkflowState {
 
   // Trigger input state
   ticker: string;
-  company: string;
 
   // Debug state
   nodeDebugData: Record<string, NodeDebugData>;
@@ -48,7 +47,6 @@ interface WorkflowState {
 
   // Trigger input actions
   setTicker: (ticker: string) => void;
-  setCompany: (company: string) => void;
 
   // Debug actions
   setNodeDebugData: (nodeId: string, data: NodeDebugData) => void;
@@ -65,8 +63,7 @@ export const useWorkflowStore = create<WorkflowState>((set) => ({
   executingNodeId: null,
 
   // Trigger input state
-  ticker: 'NVDA',
-  company: 'NVIDIA',
+  ticker: 'AAPL',
 
   // Debug state
   nodeDebugData: {},
@@ -77,8 +74,6 @@ export const useWorkflowStore = create<WorkflowState>((set) => ({
   setEdges: (edges) => set({ edges }),
 
   setTicker: (ticker) => set({ ticker }),
-
-  setCompany: (company) => set({ company }),
 
   addExecutionLog: (log) =>
     set((state) => ({

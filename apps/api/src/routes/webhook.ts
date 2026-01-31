@@ -22,9 +22,7 @@ let currentWorkflow = {
       data: {
         label: 'Stock Research',
         triggerType: 'manual',
-        // Default values - can be overridden at runtime
-        ticker: 'NVDA',
-        company: 'NVIDIA',
+        ticker: 'AAPL',
       },
     },
 
@@ -33,37 +31,84 @@ let currentWorkflow = {
       id: 'fc-news',
       type: 'firecrawl',
       position: { x: 100, y: 150 },
-      data: { label: 'Search News', mode: 'search', query: '{{company}} stock news today', limit: 3 },
+      data: { label: 'Search News', mode: 'search', query: '{{ticker}} stock news today', limit: 3 },
     },
     {
       id: 'fc-prices',
       type: 'firecrawl',
       position: { x: 400, y: 150 },
-      data: { label: 'Get Stock Data', mode: 'extract', url: 'https://www.cnbc.com/quotes/{{ticker}}', prompt: 'Extract stock price, percent change, volume, and market cap for {{company}}' },
+      data: {
+        label: 'Get Stock Data',
+        mode: 'search',
+        query: '{{ticker}} stock price today',
+        limit: 2
+      },
     },
     {
       id: 'fc-docs',
       type: 'firecrawl',
       position: { x: 700, y: 150 },
-      data: { label: 'Find Earnings Report', mode: 'search', query: '{{company}} quarterly earnings press release 2024 filetype:pdf', limit: 2 },
+      data: { label: 'Find Earnings Report', mode: 'search', query: '{{ticker}} quarterly earnings report 2024 filetype:pdf', limit: 2 },
     },
 
-    // Document parsing (connected to fc-docs)
+    // Document parsing (connected to fc-docs) - extracts structured financial data
     {
       id: 'reducto-1',
       type: 'reducto',
       position: { x: 700, y: 300 },
-      data: { label: 'Parse Earnings Report', mode: 'parse' },
+      data: {
+        label: 'Extract Financials',
+        mode: 'extract',
+        maxWaitMs: 120000, // 2 minutes for complex PDFs
+        schema: {
+          type: 'object',
+          properties: {
+            company_name: { type: 'string', description: 'Company name' },
+            fiscal_period: { type: 'string', description: 'Fiscal quarter/year (e.g., Q3 2024)' },
+            revenue: { type: 'string', description: 'Total revenue with currency' },
+            revenue_yoy_change: { type: 'string', description: 'Year-over-year revenue change percentage' },
+            net_income: { type: 'string', description: 'Net income with currency' },
+            earnings_per_share: { type: 'string', description: 'EPS (diluted)' },
+            gross_margin: { type: 'string', description: 'Gross margin percentage' },
+            guidance: { type: 'string', description: 'Forward guidance or outlook summary' },
+            key_highlights: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Top 3-5 key business highlights'
+            }
+          },
+          required: ['company_name', 'revenue']
+        }
+      },
     },
 
-    // FAN-IN: AI combines all data
+    // FAN-IN: AI combines all data (structured + unstructured)
     {
       id: 'ai-combine',
       type: 'ai',
       position: { x: 400, y: 450 },
       data: {
         label: 'Analyze & Combine',
-        prompt: 'Combine and analyze all the financial data: news sentiment, current stock price, and SEC filing insights. Provide a comprehensive summary with key metrics and recommendations.'
+        prompt: `You are a financial analyst. Analyze the provided data and create a comprehensive report.
+
+You will receive:
+1. NEWS DATA: Recent news articles about the company (sentiment analysis)
+2. STOCK DATA: Current stock price, volume, market cap from CNBC
+3. EARNINGS DATA: Structured financial metrics extracted from SEC filings including:
+   - Revenue & YoY growth
+   - Earnings per share (EPS)
+   - Gross margin & operating income
+   - Segment breakdown
+   - Forward guidance
+
+Create a structured analysis with:
+- Executive Summary (2-3 sentences)
+- Key Financial Metrics (table format)
+- News Sentiment Analysis (bullish/bearish/neutral with reasoning)
+- Risk Factors
+- Investment Recommendation (Buy/Hold/Sell with confidence level)
+
+Be specific and cite actual numbers from the data provided.`
       },
     },
 
@@ -80,13 +125,13 @@ let currentWorkflow = {
       id: 'action-dashboard',
       type: 'action',
       position: { x: 200, y: 750 },
-      data: { label: 'Update Dashboard', actionType: 'custom' },
+      data: { label: 'Update Dashboard', actionType: 'dashboard' },
     },
     {
       id: 'action-notify',
       type: 'resend',
       position: { x: 600, y: 750 },
-      data: { label: 'Send Report', to: 'kuantingk2@gmail.com', subject: 'Daily NVIDIA Report' },
+      data: { label: 'Send Report', to: 'kuantingk2@gmail.com', subject: '{{ticker}} Stock Analysis Report' },
     },
   ],
   edges: [
@@ -106,8 +151,11 @@ let currentWorkflow = {
     // AI to Approval
     { id: 'e-ai-approval', source: 'ai-combine', target: 'approval-1' },
 
-    // Approval to fan-out outputs
+    // Approval to fan-out outputs (dashboard gets data from multiple sources)
     { id: 'e-approval-dashboard', source: 'approval-1', target: 'action-dashboard' },
+    { id: 'e-news-dashboard', source: 'fc-news', target: 'action-dashboard' },
+    { id: 'e-ai-dashboard', source: 'ai-combine', target: 'action-dashboard' },
+    { id: 'e-reducto-dashboard', source: 'reducto-1', target: 'action-dashboard' },
     { id: 'e-approval-notify', source: 'approval-1', target: 'action-notify' },
   ],
 };
@@ -133,7 +181,7 @@ export function removeWSConnection(ws: { send: (data: string) => void; readyStat
   wsConnections.delete(ws);
 }
 
-function broadcast(message: { type: string; payload: unknown; timestamp: string }) {
+export function broadcast(message: { type: string; payload: unknown; timestamp: string }) {
   const data = JSON.stringify(message);
   wsConnections.forEach((ws) => {
     if (ws.readyState === 1) {
@@ -310,24 +358,19 @@ webhookRouter.post('/simulate-payment', async (c) => {
 
   const amount = body.amount || 100;
 
-  // Dynamic stock input - defaults to NVIDIA
-  const ticker = body.ticker || 'NVDA';
-  const company = body.company || 'NVIDIA';
+  // Dynamic stock input
+  const ticker = body.ticker || 'AAPL';
 
-  console.log('[Webhook] Using ticker:', ticker, 'company:', company);
+  console.log('[Webhook] Using ticker:', ticker);
 
   // Update business state
   updateBusinessState(amount);
 
   const triggerData = {
-    type: 'payment',
+    type: 'manual',
     amount,
-    currency: 'usd',
-    customerId: `cus_simulated_${Date.now()}`,
     timestamp: new Date().toISOString(),
-    // Dynamic stock data
     ticker,
-    company,
   };
 
   // Execute workflow with REAL AI processing

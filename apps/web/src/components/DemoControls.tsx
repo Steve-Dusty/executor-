@@ -1,18 +1,10 @@
 import { useState } from 'react';
 import { useWorkflowStore } from '../stores/workflowStore';
 
-// Popular stock presets
-const STOCK_PRESETS = [
-  { ticker: 'NVDA', company: 'NVIDIA' },
-  { ticker: 'AAPL', company: 'Apple' },
-  { ticker: 'TSLA', company: 'Tesla' },
-  { ticker: 'GOOGL', company: 'Google' },
-  { ticker: 'MSFT', company: 'Microsoft' },
-];
 
 export function DemoControls() {
   const [isLoading, setIsLoading] = useState<string | null>(null);
-  const { setIsExecuting, ticker, company, setTicker, setCompany } = useWorkflowStore();
+  const { setIsExecuting, ticker, setTicker } = useWorkflowStore();
 
   const simulatePayment = async (amount: number, label: string) => {
     setIsLoading(label);
@@ -22,7 +14,7 @@ export function DemoControls() {
       const response = await fetch('/api/simulate-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, ticker, company }),
+        body: JSON.stringify({ amount, ticker }),
       });
       if (!response.ok) {
         throw new Error('API request failed');
@@ -35,10 +27,6 @@ export function DemoControls() {
     }
   };
 
-  const selectPreset = (preset: { ticker: string; company: string }) => {
-    setTicker(preset.ticker.toUpperCase());
-    setCompany(preset.company);
-  };
 
   const simulateRevenueDrop = async () => {
     setIsLoading('revenue-drop');
@@ -87,50 +75,21 @@ export function DemoControls() {
         shadow-2xl shadow-black/50
         p-4 w-72
       ">
-        {/* Stock Input Section */}
+        {/* Stock Ticker Input */}
         <div className="text-[11px] text-text-tertiary uppercase tracking-wider mb-2 px-1">
-          Stock Input
+          Stock Ticker
         </div>
 
-        <div className="flex gap-2 mb-3">
-          <input
-            type="text"
-            value={ticker}
-            onChange={(e) => setTicker(e.target.value.toUpperCase())}
-            placeholder="TICKER"
-            className="flex-1 px-3 py-2 rounded-lg text-sm font-mono
-              bg-glass-bg border border-glass-border text-text-primary
-              placeholder-text-tertiary focus:outline-none focus:border-accent-purple/50
-              uppercase"
-          />
-          <input
-            type="text"
-            value={company}
-            onChange={(e) => setCompany(e.target.value)}
-            placeholder="Company"
-            className="flex-1 px-3 py-2 rounded-lg text-sm
-              bg-glass-bg border border-glass-border text-text-primary
-              placeholder-text-tertiary focus:outline-none focus:border-accent-purple/50"
-          />
-        </div>
-
-        {/* Quick Presets */}
-        <div className="flex flex-wrap gap-1.5 mb-4">
-          {STOCK_PRESETS.map((preset) => (
-            <button
-              key={preset.ticker}
-              onClick={() => selectPreset(preset)}
-              className={`
-                px-2 py-1 rounded-md text-xs font-medium transition-all
-                ${ticker === preset.ticker
-                  ? 'bg-accent-purple/30 text-accent-purple border border-accent-purple/30'
-                  : 'bg-glass-bg border border-glass-border text-text-secondary hover:text-text-primary hover:border-accent-purple/30'}
-              `}
-            >
-              {preset.ticker}
-            </button>
-          ))}
-        </div>
+        <input
+          type="text"
+          value={ticker}
+          onChange={(e) => setTicker(e.target.value.toUpperCase())}
+          placeholder="Enter ticker (e.g. AAPL, TSLA, MU)"
+          className="w-full px-3 py-2 rounded-lg text-sm font-mono mb-3
+            bg-glass-bg border border-glass-border text-text-primary
+            placeholder-text-tertiary focus:outline-none focus:border-accent-purple/50
+            uppercase"
+        />
 
         <div className="border-t border-glass-border my-3" />
 

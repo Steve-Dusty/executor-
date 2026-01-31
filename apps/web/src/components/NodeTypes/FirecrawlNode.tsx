@@ -52,9 +52,6 @@ export function FirecrawlNode({ data, selected }: NodeProps) {
               <div className="text-xs text-text-tertiary capitalize">{nodeData.mode || 'scrape'}</div>
             </div>
           </div>
-          {nodeData.url && (
-            <div className="mt-2 text-xs text-text-tertiary truncate">{nodeData.url}</div>
-          )}
         </div>
       </div>
 
