@@ -7,6 +7,7 @@ import { chatRouter } from './routes/chat';
 import { testRouter } from './routes/test';
 import { approveRouter } from './routes/approve';
 import { dashboardRouter, setDashboardBroadcast } from './routes/dashboard';
+import { connectDatabase } from './services/database';
 
 const app = new Hono();
 
@@ -61,6 +62,11 @@ app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOStri
 const port = Number(process.env.PORT) || 3001;
 
 console.log(`Starting server on port ${port}...`);
+
+// Connect to MongoDB (optional - gracefully handle if not configured)
+connectDatabase()
+  .then(() => console.log('✓ MongoDB connected'))
+  .catch((err) => console.log('⚠ MongoDB not connected (RAG features disabled):', err.message));
 
 // Create a server reference that we can use in the fetch handler
 let server: ReturnType<typeof Bun.serve>;

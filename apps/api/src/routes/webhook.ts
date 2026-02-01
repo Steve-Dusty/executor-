@@ -26,17 +26,17 @@ let currentWorkflow = {
       },
     },
 
-    // FAN-OUT: Three parallel research branches (dynamic queries)
+    // FAN-OUT: Four parallel research branches (dynamic queries)
     {
       id: 'fc-news',
       type: 'firecrawl',
-      position: { x: 100, y: 150 },
+      position: { x: 50, y: 150 },
       data: { label: 'Search News', mode: 'search', query: '{{ticker}} stock news today', limit: 3 },
     },
     {
       id: 'fc-prices',
       type: 'firecrawl',
-      position: { x: 400, y: 150 },
+      position: { x: 275, y: 150 },
       data: {
         label: 'Get Stock Data',
         mode: 'search',
@@ -47,8 +47,21 @@ let currentWorkflow = {
     {
       id: 'fc-docs',
       type: 'firecrawl',
-      position: { x: 700, y: 150 },
+      position: { x: 500, y: 150 },
       data: { label: 'Find Earnings Report', mode: 'search', query: '{{ticker}} quarterly earnings report 2024 filetype:pdf', limit: 2 },
+    },
+    // RAG: Historical context from MongoDB vector search
+    {
+      id: 'mongo-rag',
+      type: 'mongo_rag',
+      position: { x: 725, y: 150 },
+      data: {
+        label: 'Historical Context',
+        ticker: '{{ticker}}',
+        query: '{{ticker}} financial performance earnings revenue',
+        collections: ['news_archive', 'earnings', 'filings'],
+        topK: 5,
+      },
     },
 
     // Document parsing (connected to fc-docs) - parse mode is MUCH faster than extract
@@ -121,18 +134,20 @@ Be specific and cite actual numbers from the data.`
     },
   ],
   edges: [
-    // Trigger to fan-out
+    // Trigger to fan-out (including RAG)
     { id: 'e-t-news', source: 'trigger-1', target: 'fc-news' },
     { id: 'e-t-prices', source: 'trigger-1', target: 'fc-prices' },
     { id: 'e-t-docs', source: 'trigger-1', target: 'fc-docs' },
+    { id: 'e-t-rag', source: 'trigger-1', target: 'mongo-rag' },
 
     // Docs to Reducto
     { id: 'e-docs-reducto', source: 'fc-docs', target: 'reducto-1' },
 
-    // Fan-in to AI
+    // Fan-in to AI (including RAG historical context)
     { id: 'e-news-ai', source: 'fc-news', target: 'ai-combine' },
     { id: 'e-prices-ai', source: 'fc-prices', target: 'ai-combine' },
     { id: 'e-reducto-ai', source: 'reducto-1', target: 'ai-combine' },
+    { id: 'e-rag-ai', source: 'mongo-rag', target: 'ai-combine' },
 
     // AI to Approval
     { id: 'e-ai-approval', source: 'ai-combine', target: 'approval-1' },
@@ -143,6 +158,8 @@ Be specific and cite actual numbers from the data.`
     { id: 'e-ai-dashboard', source: 'ai-combine', target: 'action-dashboard' },
     { id: 'e-reducto-dashboard', source: 'reducto-1', target: 'action-dashboard' },
     { id: 'e-approval-notify', source: 'approval-1', target: 'action-notify' },
+    // RAG to email for historical sources section
+    { id: 'e-rag-notify', source: 'mongo-rag', target: 'action-notify' },
   ],
 };
 
